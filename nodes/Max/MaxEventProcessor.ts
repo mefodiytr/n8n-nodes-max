@@ -147,14 +147,15 @@ export class MaxEventProcessor {
 	 * @returns `true` если событие уже видели → workflow запускать не надо.
 	 */
 	public isDuplicateDelivery(this: IWebhookFunctions, bodyData: MaxWebhookEvent): boolean {
-		const key = buildDedupKey(bodyData);
-		if (key === null) {
+		const built = buildDedupKey(bodyData);
+		if (built === null) {
 			this.logger.warn(
-				'Max Trigger - не удалось построить дедуп-ключ (нет update_type/timestamp), пропускаю дедуп',
+				'Max Trigger - не удалось построить дедуп-ключ (нет update_type), пропускаю дедуп',
 			);
 			return false;
 		}
 
+		const { key, ttlMs } = built;
 		const staticData = this.getWorkflowStaticData('node') as Record<string, unknown>;
 		const state = readState(staticData);
 		const now = Date.now();
@@ -166,7 +167,7 @@ export class MaxEventProcessor {
 			return true;
 		}
 
-		record(state, key, now);
+		record(state, key, now + ttlMs);
 		writeState(staticData, state);
 		return false;
 	}

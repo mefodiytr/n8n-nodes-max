@@ -2,6 +2,8 @@ import {
 	buildDedupKey,
 	createEmptyState,
 	DEDUP_STATIC_KEY,
+	DEFAULT_TTL_MS,
+	UNKNOWN_TTL_MS,
 	isDuplicate,
 	pruneExpired,
 	readState,
@@ -33,68 +35,75 @@ describe('EventDedupCache', () => {
 			const data = {
 				[DEDUP_STATIC_KEY]: {
 					recent: [
-						{ key: 'ok', ts: 1000 },
-						{ key: 123, ts: 2000 }, // невалидный key
-						{ key: 'no-ts' }, // нет ts
+						{ key: 'ok', expires_at: 1000 },
+						{ key: 123, expires_at: 2000 }, // невалидный key
+						{ key: 'no-expires' }, // нет ни expires_at, ни ts
 						null,
-						{ key: 'ok2', ts: 3000 },
+						{ key: 'ok2', expires_at: 3000 },
 					],
 				},
 			};
 			expect(readState(data)).toEqual({
 				recent: [
-					{ key: 'ok', ts: 1000 },
-					{ key: 'ok2', ts: 3000 },
+					{ key: 'ok', expires_at: 1000 },
+					{ key: 'ok2', expires_at: 3000 },
 				],
+			});
+		});
+
+		it('мигрирует со старого формата ts → expires_at', () => {
+			const data = {
+				[DEDUP_STATIC_KEY]: {
+					recent: [{ key: 'legacy', ts: 1_000_000 }],
+				},
+			};
+			expect(readState(data)).toEqual({
+				recent: [{ key: 'legacy', expires_at: 1_000_000 + DEFAULT_TTL_MS }],
 			});
 		});
 
 		it('writeState кладёт state по ключу _dedup', () => {
 			const data: Record<string, unknown> = {};
-			const state = { recent: [{ key: 'a', ts: 1 }] };
+			const state = { recent: [{ key: 'a', expires_at: 1 }] };
 			writeState(data, state);
 			expect(data[DEDUP_STATIC_KEY]).toEqual(state);
 		});
 	});
 
 	describe('pruneExpired', () => {
-		it('удаляет записи старше 24 часов', () => {
+		it('удаляет записи с истёкшим expires_at', () => {
 			const now = 1_700_000_000_000;
-			const day = 24 * 60 * 60 * 1000;
 			const state = {
 				recent: [
-					{ key: 'old', ts: now - day - 1 }, // 24ч+1мс назад → удалить
-					{ key: 'fresh', ts: now - 1000 },
+					{ key: 'old', expires_at: now - 1 }, // уже истёк
+					{ key: 'fresh', expires_at: now + 1000 },
 				],
 			};
 			pruneExpired(state, now);
-			expect(state.recent).toEqual([{ key: 'fresh', ts: now - 1000 }]);
+			expect(state.recent).toEqual([{ key: 'fresh', expires_at: now + 1000 }]);
 		});
 
-		it('сохраняет записи на границе TTL', () => {
+		it('сохраняет записи на границе TTL (expires_at == now → удалить)', () => {
 			const now = 1_700_000_000_000;
-			const day = 24 * 60 * 60 * 1000;
-			const state = {
-				recent: [{ key: 'edge', ts: now - day + 1 }],
-			};
+			const state = { recent: [{ key: 'edge', expires_at: now }] };
 			pruneExpired(state, now);
-			expect(state.recent).toHaveLength(1);
+			expect(state.recent).toEqual([]);
 		});
 	});
 
 	describe('isDuplicate / record', () => {
-		it('record добавляет запись, isDuplicate его потом видит', () => {
+		it('record добавляет запись, isDuplicate её потом видит', () => {
 			const state = createEmptyState();
 			expect(isDuplicate(state, 'k1')).toBe(false);
-			record(state, 'k1', 100);
+			record(state, 'k1', 1000);
 			expect(isDuplicate(state, 'k1')).toBe(true);
 			expect(isDuplicate(state, 'k2')).toBe(false);
 		});
 
-		it('обрезает recent до 200 записей (LRU)', () => {
+		it('обрезает recent до 200 записей (FIFO)', () => {
 			const state = createEmptyState();
 			for (let i = 0; i < 250; i++) {
-				record(state, `k${i}`, i);
+				record(state, `k${i}`, i + 1000);
 			}
 			expect(state.recent).toHaveLength(200);
 			// Самые старые выкинуты.
@@ -105,7 +114,7 @@ describe('EventDedupCache', () => {
 		});
 	});
 
-	describe('buildDedupKey', () => {
+	describe('buildDedupKey — схема per update_type', () => {
 		const baseTs = 1_640_995_200_000;
 
 		it('null если нет update_type', () => {
@@ -113,73 +122,165 @@ describe('EventDedupCache', () => {
 			expect(buildDedupKey(body)).toBeNull();
 		});
 
-		it('null если нет timestamp', () => {
-			const body = { update_type: 'message_created' } as unknown as MaxWebhookEvent;
-			expect(buildDedupKey(body)).toBeNull();
+		describe('message_created / edited / removed → ${update_type}:${mid}', () => {
+			it('message_created по message.body.mid', () => {
+				const body: MaxWebhookEvent = {
+					update_type: 'message_created',
+					timestamp: baseTs,
+					message: { body: { mid: 'msg_1', seq: 1 } },
+				};
+				const built = buildDedupKey(body);
+				expect(built).toEqual({ key: 'message_created:msg_1', ttlMs: DEFAULT_TTL_MS });
+			});
+
+			it('message_edited по тому же mid → другой ключ за счёт update_type', () => {
+				const body: MaxWebhookEvent = {
+					update_type: 'message_edited',
+					timestamp: baseTs,
+					message: { body: { mid: 'msg_1', seq: 2 } },
+				};
+				expect(buildDedupKey(body)?.key).toBe('message_edited:msg_1');
+			});
+
+			it('message_removed: top-level message_id как fallback', () => {
+				const body: MaxWebhookEvent = {
+					update_type: 'message_removed',
+					timestamp: baseTs,
+					message_id: 'mr_7',
+				};
+				expect(buildDedupKey(body)?.key).toBe('message_removed:mr_7');
+			});
+
+			it('message_created без mid → unknown SHA-256 + TTL 60s', () => {
+				const body: MaxWebhookEvent = {
+					update_type: 'message_created',
+					timestamp: baseTs,
+					// нет message.body.mid и нет message_id
+				};
+				const built = buildDedupKey(body);
+				expect(built?.key).toMatch(/^unknown:[0-9a-f]{64}$/);
+				expect(built?.ttlMs).toBe(UNKNOWN_TTL_MS);
+			});
 		});
 
-		it('для message_created использует body.mid', () => {
-			const body: MaxWebhookEvent = {
-				update_type: 'message_created',
-				timestamp: baseTs,
-				message: {
-					body: { mid: 'msg_1', seq: 1 },
+		describe('message_callback → callback:${callback_id}', () => {
+			it('по callback.callback_id', () => {
+				const body: MaxWebhookEvent = {
+					update_type: 'message_callback',
+					timestamp: baseTs,
+					callback: { callback_id: 'cb_42' },
+				};
+				expect(buildDedupKey(body)).toEqual({ key: 'callback:cb_42', ttlMs: DEFAULT_TTL_MS });
+			});
+
+			it('legacy callback.id поддержан как fallback', () => {
+				const body: MaxWebhookEvent = {
+					update_type: 'message_callback',
+					timestamp: baseTs,
+					callback: { id: 'legacy_id' },
+				};
+				expect(buildDedupKey(body)?.key).toBe('callback:legacy_id');
+			});
+		});
+
+		describe('bot_started/added/removed + user_added/removed → ${type}:${chat}:${user}:${ts}', () => {
+			it.each([['bot_started'], ['bot_added'], ['bot_removed'], ['user_added'], ['user_removed']])(
+				'%s',
+				(updateType) => {
+					const body: MaxWebhookEvent = {
+						update_type: updateType,
+						timestamp: baseTs,
+						chat_id: 100,
+						user: { user_id: 200 },
+					};
+					expect(buildDedupKey(body)).toEqual({
+						key: `${updateType}:100:200:${baseTs}`,
+						ttlMs: DEFAULT_TTL_MS,
+					});
 				},
-			};
-			expect(buildDedupKey(body)).toBe(`message_created:m:msg_1:${baseTs}`);
+			);
+
+			it('chat.chat_id (вложенный) приоритетнее top-level chat_id', () => {
+				const body: MaxWebhookEvent = {
+					update_type: 'bot_added',
+					timestamp: baseTs,
+					chat_id: 999, // должен игнорироваться
+					chat: { chat_id: 555, type: 'chat' },
+					user: { user_id: 200 },
+				};
+				expect(buildDedupKey(body)?.key).toBe(`bot_added:555:200:${baseTs}`);
+			});
+
+			it('без user.user_id → unknown', () => {
+				const body: MaxWebhookEvent = {
+					update_type: 'bot_added',
+					timestamp: baseTs,
+					chat_id: 100,
+				};
+				expect(buildDedupKey(body)?.key).toMatch(/^unknown:/);
+			});
 		});
 
-		it('для message_callback использует callback_id', () => {
-			const body: MaxWebhookEvent = {
-				update_type: 'message_callback',
-				timestamp: baseTs,
-				callback: { callback_id: 'cb_42' },
-			};
-			expect(buildDedupKey(body)).toBe(`message_callback:cb:cb_42:${baseTs}`);
+		describe('chat_title_changed → chat_title:${chat_id}:${ts}', () => {
+			it('по chat.chat_id', () => {
+				const body: MaxWebhookEvent = {
+					update_type: 'chat_title_changed',
+					timestamp: baseTs,
+					chat: { chat_id: 999, type: 'chat' },
+				};
+				expect(buildDedupKey(body)).toEqual({
+					key: `chat_title:999:${baseTs}`,
+					ttlMs: DEFAULT_TTL_MS,
+				});
+			});
 		});
 
-		it('для message_removed использует верхнеуровневый message_id', () => {
-			const body: MaxWebhookEvent = {
-				update_type: 'message_removed',
-				timestamp: baseTs,
-				message_id: 'mr_7',
-			};
-			expect(buildDedupKey(body)).toBe(`message_removed:mid:mr_7:${baseTs}`);
+		describe('message_chat_created → mcc:${chat.chat_id}:${ts}', () => {
+			it('по chat.chat_id', () => {
+				const body: MaxWebhookEvent = {
+					update_type: 'message_chat_created',
+					timestamp: baseTs,
+					chat: { chat_id: 12345, type: 'chat' },
+				};
+				expect(buildDedupKey(body)).toEqual({
+					key: `mcc:12345:${baseTs}`,
+					ttlMs: DEFAULT_TTL_MS,
+				});
+			});
 		});
 
-		it('для bot_started падает на user.user_id', () => {
-			const body: MaxWebhookEvent = {
-				update_type: 'bot_started',
-				timestamp: baseTs,
-				user: { user_id: 555 },
-			};
-			expect(buildDedupKey(body)).toBe(`bot_started:u:555:${baseTs}`);
-		});
+		describe('неизвестный update_type → unknown:SHA-256(body без timestamp)', () => {
+			it('одинаковое тело → одинаковый хеш, разные timestamp игнорируются', () => {
+				const a: MaxWebhookEvent = {
+					update_type: 'something_new',
+					timestamp: baseTs,
+					user: { user_id: 1 },
+				};
+				const b: MaxWebhookEvent = {
+					update_type: 'something_new',
+					timestamp: baseTs + 99999,
+					user: { user_id: 1 },
+				};
+				const ka = buildDedupKey(a);
+				const kb = buildDedupKey(b);
+				expect(ka?.key).toBe(kb?.key);
+				expect(ka?.key).toMatch(/^unknown:[0-9a-f]{64}$/);
+				expect(ka?.ttlMs).toBe(UNKNOWN_TTL_MS);
+			});
 
-		it('для chat_title_changed падает на chat.chat_id', () => {
-			const body: MaxWebhookEvent = {
-				update_type: 'chat_title_changed',
-				timestamp: baseTs,
-				chat: { chat_id: 999, type: 'chat' },
-			};
-			expect(buildDedupKey(body)).toBe(`chat_title_changed:c:999:${baseTs}`);
-		});
-
-		it('для bot_added/bot_removed использует верхнеуровневый chat_id', () => {
-			const body: MaxWebhookEvent = {
-				update_type: 'bot_added',
-				timestamp: baseTs,
-				chat_id: 777,
-			};
-			expect(buildDedupKey(body)).toBe(`bot_added:c:777:${baseTs}`);
-		});
-
-		it('fallback "na" если ни одного id нет', () => {
-			const body: MaxWebhookEvent = {
-				update_type: 'unknown_event',
-				timestamp: baseTs,
-			};
-			expect(buildDedupKey(body)).toBe(`unknown_event:na:${baseTs}`);
+			it('разное тело → разный хеш', () => {
+				const a: MaxWebhookEvent = {
+					update_type: 'something_new',
+					timestamp: baseTs,
+					user: { user_id: 1 },
+				};
+				const b: MaxWebhookEvent = {
+					update_type: 'something_new',
+					timestamp: baseTs,
+					user: { user_id: 2 },
+				};
+				expect(buildDedupKey(a)?.key).not.toBe(buildDedupKey(b)?.key);
+			});
 		});
 	});
 });

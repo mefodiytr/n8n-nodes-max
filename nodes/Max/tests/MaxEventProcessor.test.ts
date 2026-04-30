@@ -195,13 +195,14 @@ describe('MaxEventProcessor', () => {
 
 		it('дедуп переживает рестарт: чужое staticData с уже виденным ключом блокирует', async () => {
 			const event = buildEvent('msg_persisted');
-			// Имитируем, что предыдущий запуск n8n уже записал ключ.
+			// Имитируем, что предыдущий запуск n8n уже записал ключ
+			// (новый формат с expires_at в будущем).
 			const persistedStatic: Record<string, unknown> = {
 				_dedup: {
 					recent: [
 						{
-							key: 'message_created:m:msg_persisted:1640995200000',
-							ts: Date.now(),
+							key: 'message_created:msg_persisted',
+							expires_at: Date.now() + 60_000,
 						},
 					],
 				},
