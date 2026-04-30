@@ -33,7 +33,7 @@
  10. Bot info get/set             [S]   medium
  11. Keyboard helpers refactor    [S]   low
 
-Релиз 1.0.0 — публикация под @mefodiy scope
+Релиз 1.0.0 — публикация под @bccontrol scope
  12. README + публикация          [S]   (см. §Releases)
 ```
 
@@ -393,25 +393,25 @@ refactor).
 **Что проверить:** ничего из старого функционала не сломалось.
 Регресс-тесты по клавиатурам прошли.
 
-### 1.0.0 — публикация под `@mefodiy` scope
+### 1.0.0 — публикация под `@bccontrol` scope
 
 **Что:**
 
-- В `package.json:2` — `"name": "@mefodiy/n8n-nodes-max"`
+- В `package.json:2` — `"name": "@bccontrol/n8n-nodes-max"`
   (обновлено в одном коммите вместе с README/CHANGELOG).
-- npm scope создаётся отдельно через `npm login --scope=@mefodiy`
+- npm scope создаётся отдельно через `npm login --scope=@bccontrol`
   (одноразовая операция вне репозитория).
 - В `package.json` добавить `"publishConfig": {"access":
 "public"}` — иначе scoped по умолчанию приватный.
 - GitHub Actions workflow для публикации (если ещё нет — добавить
   стандартный для scoped public package).
-- `NPM_TOKEN` secret должен иметь права на scope `@mefodiy`
+- `NPM_TOKEN` secret должен иметь права на scope `@bccontrol`
   (создаётся в npmjs.com → Settings → Access Tokens).
-- README — секция «Установка»: `npm install @mefodiy/n8n-nodes-max`.
+- README — секция «Установка»: `npm install @bccontrol/n8n-nodes-max`.
 
 **Acceptance:** `npm publish --dry-run` локально проходит;
 после `git push origin master --follow-tags` пакет появляется на
-[npmjs.com/package/@mefodiy/n8n-nodes-max](https://www.npmjs.com/package/@mefodiy/n8n-nodes-max).
+[npmjs.com/package/@bccontrol/n8n-nodes-max](https://www.npmjs.com/package/@bccontrol/n8n-nodes-max).
 
 ---
 

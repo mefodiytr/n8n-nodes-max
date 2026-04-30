@@ -1,15 +1,25 @@
 {
-	"name": "n8n-nodes-max",
+	"name": "@bccontrol/n8n-nodes-max",
 	"version": "0.1.21",
-	"description": "n8n community node for Max messenger integration. Send messages, handle webhooks, manage attachments, and create interactive bot experiences using the official Max Bot API.",
+	"description": "n8n community node for Max messenger integration. Fork of pfrankov/n8n-nodes-max with additional message and chat operations (pin/unpin/forward/edit_chat/send_action) and webhook deduplication.",
 	"keywords": [
 		"n8n-community-node-package"
 	],
 	"license": "MIT",
 	"homepage": "",
-	"author": {
-		"name": "Pavel Frankov"
+	"publishConfig": {
+		"access": "public"
 	},
+	"author": {
+		"name": "BCcontrol",
+		"url": "https://github.com/mefodiytr"
+	},
+	"contributors": [
+		{
+			"name": "Pavel Frankov",
+			"url": "https://github.com/pfrankov"
+		}
+	],
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/pfrankov/n8n-nodes-max.git"

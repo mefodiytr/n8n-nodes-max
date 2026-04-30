@@ -17,6 +17,7 @@
 
 ### Сопровождение
 
+- Пакет переехал в собственный scope — устанавливается как `@bccontrol/n8n-nodes-max`. Это форк, основной репозиторий [pfrankov/n8n-nodes-max](https://github.com/pfrankov/n8n-nodes-max) живёт под прежним именем без изменений.
 - Опции операций в UI отсортированы по алфавиту (правило `n8n-nodes-base/node-param-options-type-unsorted-items`).
 - Helpers `passesAdditionalFilters` / `passesChatIdFilter` / `passesUserIdFilter` принимают опциональный `Logger`-параметр — фильтрация может писать в n8n-логи без хардкода `console.log`.
 

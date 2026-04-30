@@ -1,8 +1,11 @@
-# n8n-nodes-max
+# @bccontrol/n8n-nodes-max
 
-[![npm version](https://img.shields.io/npm/v/n8n-nodes-max?logo=npm)](https://www.npmjs.com/package/n8n-nodes-max)
+[![npm version](https://img.shields.io/npm/v/@bccontrol/n8n-nodes-max?logo=npm)](https://www.npmjs.com/package/@bccontrol/n8n-nodes-max)
 
 Нода для интеграции мессенджера Max с платформой автоматизации n8n.
+
+> Это форк [pfrankov/n8n-nodes-max](https://github.com/pfrankov/n8n-nodes-max) с расширенным набором операций (`Pin/Unpin/Forward Message`, `Edit Chat`, `Send Action`) и дедупликацией webhook-событий. См. `CHANGELOG.md` для подробностей.
+
 <img width="518" height="429" alt="image" src="https://github.com/user-attachments/assets/577165bb-510f-4523-b898-76ea94dc0f2b" />
 
 ## Установка
@@ -12,7 +15,7 @@
 1. Установите пакет через npm в директории n8n:
 
 ```bash
-npm install n8n-nodes-max
+npm install @bccontrol/n8n-nodes-max
 ```
 
 2. Перезапустите n8n для загрузки новой ноды
@@ -22,14 +25,14 @@ npm install n8n-nodes-max
 1. Откройте настройки вашего workspace
 2. Перейдите в раздел "Community nodes"
 3. Нажмите "Install a community node"
-4. Введите `n8n-nodes-max` и нажмите "Install"
+4. Введите `@bccontrol/n8n-nodes-max` и нажмите "Install"
 
 ### Альтернативный способ (переменная окружения)
 
 Добавьте пакет в переменную окружения:
 
 ```bash
-export N8N_CUSTOM_EXTENSIONS=n8n-nodes-max
+export N8N_CUSTOM_EXTENSIONS=@bccontrol/n8n-nodes-max
 ```
 
 **Полезные ссылки:**
