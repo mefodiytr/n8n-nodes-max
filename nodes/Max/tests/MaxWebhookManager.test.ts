@@ -15,6 +15,12 @@ describe('MaxWebhookManager', () => {
 			helpers: {
 				httpRequest: jest.fn(),
 			} as any,
+			logger: {
+				debug: jest.fn(),
+				info: jest.fn(),
+				warn: jest.fn(),
+				error: jest.fn(),
+			} as any,
 		};
 	});
 

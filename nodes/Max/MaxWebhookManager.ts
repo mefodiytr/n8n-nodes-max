@@ -40,7 +40,7 @@ export class MaxWebhookManager {
 		try {
 			const { baseUrl, webhookUrl } = await manager.getWebhookConfig(this);
 
-			console.log('Max Trigger - checkExists: Checking for webhook:', webhookUrl);
+			this.logger.debug('Max Trigger - checkExists: Checking for webhook', { webhookUrl });
 
 			const response = await manager.getSubscriptions(this, baseUrl);
 
@@ -50,18 +50,20 @@ export class MaxWebhookManager {
 				);
 
 				if (existingSubscription) {
-					console.log('Max Trigger - checkExists: Found existing webhook, returning true');
+					this.logger.debug('Max Trigger - checkExists: Found existing webhook, returning true');
 					return true;
 				}
 
-				console.log(
+				this.logger.debug(
 					`Max Trigger - checkExists: No matching webhook found among ${response.subscriptions.length} subscriptions`,
 				);
 			}
 
 			return false;
 		} catch (error) {
-			console.log('Max Trigger - checkExists: Error checking webhook:', error);
+			this.logger.error('Max Trigger - checkExists: Error checking webhook', {
+				error: String(error),
+			});
 			return false;
 		}
 	}
@@ -83,7 +85,7 @@ export class MaxWebhookManager {
 			const { baseUrl, webhookUrl, events, credentials, additionalFields } =
 				await manager.getWebhookConfig(this);
 
-			console.log('Max Trigger - create: Creating webhook for:', webhookUrl);
+			this.logger.info('Max Trigger - create: Creating webhook', { webhookUrl });
 
 			// Check if our specific webhook already exists
 			const existingResponse = await manager.getSubscriptions(this, baseUrl);
@@ -94,11 +96,11 @@ export class MaxWebhookManager {
 				);
 
 				if (existingSubscription) {
-					console.log('Max Trigger - create: Webhook already exists, skipping creation');
+					this.logger.debug('Max Trigger - create: Webhook already exists, skipping creation');
 					return true;
 				}
 
-				console.log(
+				this.logger.debug(
 					`Max Trigger - create: Found ${existingResponse.subscriptions.length} existing subscriptions, but none match our URL`,
 				);
 			}
@@ -113,10 +115,12 @@ export class MaxWebhookManager {
 				additionalFields,
 			);
 
-			console.log('Max Trigger - create: Webhook subscription created successfully');
+			this.logger.info('Max Trigger - create: Webhook subscription created successfully');
 			return true;
 		} catch (error) {
-			console.log('Max Trigger - create: Error creating webhook subscription:', error);
+			this.logger.error('Max Trigger - create: Error creating webhook subscription', {
+				error: String(error),
+			});
 			throw error;
 		}
 	}
@@ -135,7 +139,7 @@ export class MaxWebhookManager {
 		try {
 			const { baseUrl, webhookUrl, credentials } = await manager.getWebhookConfig(this);
 
-			console.log('Max Trigger - delete: Cleaning up webhook for:', webhookUrl);
+			this.logger.info('Max Trigger - delete: Cleaning up webhook', { webhookUrl });
 
 			// Get existing subscriptions
 			const existingResponse = await manager.getSubscriptions(this, baseUrl);
@@ -148,15 +152,15 @@ export class MaxWebhookManager {
 
 				if (targetSubscription) {
 					await manager.deleteSubscription(this, baseUrl, targetSubscription.url, credentials);
-					console.log('Max Trigger - delete: Webhook subscription deleted successfully');
+					this.logger.info('Max Trigger - delete: Webhook subscription deleted successfully');
 				} else {
-					console.log('Max Trigger - delete: No matching webhook found to delete');
+					this.logger.debug('Max Trigger - delete: No matching webhook found to delete');
 				}
 			}
 
 			return true;
 		} catch (error) {
-			console.log('Max Trigger - delete: Error during cleanup:', error);
+			this.logger.error('Max Trigger - delete: Error during cleanup', { error: String(error) });
 			return false;
 		}
 	}

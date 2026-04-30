@@ -1,4 +1,4 @@
-import type { IWebhookFunctions, IDataObject, IWebhookResponseData } from 'n8n-workflow';
+import type { IWebhookFunctions, IDataObject, IWebhookResponseData, Logger } from 'n8n-workflow';
 import type { MaxWebhookEvent, MaxTriggerEvent } from './MaxTriggerConfig';
 import {
 	buildDedupKey,
@@ -90,27 +90,27 @@ export class MaxEventProcessor {
 			const additionalFields = this.getNodeParameter('additionalFields') as IDataObject;
 			const events = this.getNodeParameter('events') as MaxTriggerEvent[];
 
-			console.log('Max Trigger - Processing webhook event');
+			this.logger.debug('Max Trigger - Processing webhook event');
 
 			// Validate body data
 			if (!bodyData) {
-				console.log('Max Trigger - No body data received');
+				this.logger.debug('Max Trigger - No body data received');
 				return { workflowData: [] };
 			}
 
 			// Extract and validate event type
 			const eventType = bodyData.update_type;
 			if (!eventType) {
-				console.log('Max Trigger - No event type found in webhook body');
+				this.logger.debug('Max Trigger - No event type found in webhook body');
 				return { workflowData: [] };
 			} // Filter by event type
 			if (!events.includes(eventType as MaxTriggerEvent)) {
-				console.log(`Max Trigger - Event type '${eventType}' filtered out`);
+				this.logger.debug(`Max Trigger - Event type '${eventType}' filtered out`);
 				return { workflowData: [] };
 			}
 
 			// Apply additional filters
-			if (!processor.passesAdditionalFilters(bodyData, additionalFields)) {
+			if (!processor.passesAdditionalFilters(bodyData, additionalFields, this.logger)) {
 				return { workflowData: [] };
 			}
 
@@ -120,7 +120,7 @@ export class MaxEventProcessor {
 				return { workflowData: [] };
 			}
 
-			console.log('Max Trigger - Event passed filters, triggering workflow');
+			this.logger.debug('Max Trigger - Event passed filters, triggering workflow');
 
 			// Process event-specific data and normalize
 			const normalizedData = processor.processEventSpecificData(bodyData, eventType);
@@ -130,7 +130,7 @@ export class MaxEventProcessor {
 			};
 		} catch (error) {
 			// Log error but don't throw - return empty response to avoid webhook recreation
-			console.log('Max Trigger - Error processing webhook:', error);
+			this.logger.error('Max Trigger - Error processing webhook', { error: String(error) });
 			return { workflowData: [] };
 		}
 	}
@@ -173,28 +173,35 @@ export class MaxEventProcessor {
 
 	/**
 	 * Apply additional filters (chat IDs, user IDs)
+	 *
+	 * Logger опционален — если передан (из processWebhookEvent через
+	 * this.logger n8n-контекста), фильтрация и ошибки пишутся через
+	 * него; иначе helpers молчат.
 	 */
 	public passesAdditionalFilters(
 		bodyData: MaxWebhookEvent,
 		additionalFields: IDataObject,
+		logger?: Logger,
 	): boolean {
 		try {
 			// Extract chat and user info safely
 			const { chatInfo, userInfo } = this.extractChatAndUserInfo(bodyData);
 
 			// Filter by chat IDs if specified
-			if (!this.passesChatIdFilter(chatInfo, additionalFields)) {
+			if (!this.passesChatIdFilter(chatInfo, additionalFields, logger)) {
 				return false;
 			}
 
 			// Filter by user IDs if specified
-			if (!this.passesUserIdFilter(userInfo, additionalFields)) {
+			if (!this.passesUserIdFilter(userInfo, additionalFields, logger)) {
 				return false;
 			}
 
 			return true;
 		} catch (filterError) {
-			console.log('Max Trigger - Error in filtering, proceeding without filters:', filterError);
+			logger?.warn('Max Trigger - Error in filtering, proceeding without filters', {
+				error: String(filterError),
+			});
 			// Continue processing even if filtering fails
 			return true;
 		}
@@ -220,7 +227,11 @@ export class MaxEventProcessor {
 	/**
 	 * Check if event passes chat ID filter
 	 */
-	private passesChatIdFilter(chatInfo: any, additionalFields: IDataObject): boolean {
+	private passesChatIdFilter(
+		chatInfo: any,
+		additionalFields: IDataObject,
+		logger?: Logger,
+	): boolean {
 		if (!additionalFields['chatIds']) {
 			return true;
 		}
@@ -247,7 +258,7 @@ export class MaxEventProcessor {
 		const isAllowed = chatIds.includes(String(chatId));
 
 		if (!isAllowed) {
-			console.log(`Max Trigger - Chat ID ${chatId} filtered out`);
+			logger?.debug(`Max Trigger - Chat ID ${chatId} filtered out`);
 		}
 
 		return isAllowed;
@@ -256,7 +267,11 @@ export class MaxEventProcessor {
 	/**
 	 * Check if event passes user ID filter
 	 */
-	private passesUserIdFilter(userInfo: any, additionalFields: IDataObject): boolean {
+	private passesUserIdFilter(
+		userInfo: any,
+		additionalFields: IDataObject,
+		logger?: Logger,
+	): boolean {
 		if (!additionalFields['userIds']) {
 			return true;
 		}
@@ -283,7 +298,7 @@ export class MaxEventProcessor {
 		const isAllowed = userIds.includes(String(userId));
 
 		if (!isAllowed) {
-			console.log(`Max Trigger - User ID ${userId} filtered out`);
+			logger?.debug(`Max Trigger - User ID ${userId} filtered out`);
 		}
 
 		return isAllowed;
