@@ -2010,6 +2010,66 @@ export async function editChat(
 }
 
 /**
+ * Поддержанные значения для `chat/sendAction`.
+ *
+ * Согласовано с заказчиком; точные actions подтверждены по
+ * dev.max.ru/docs-api. `typing_on` не имеет парного `typing_off` —
+ * клиент MAX сам гасит индикатор по таймауту.
+ */
+export const CHAT_ACTIONS = [
+	'typing_on',
+	'sending_photo',
+	'sending_video',
+	'sending_audio',
+	'sending_file',
+	'mark_seen',
+] as const;
+
+export type ChatAction = (typeof CHAT_ACTIONS)[number];
+
+/**
+ * Отправить «бот печатает…» / «бот отправляет файл…» индикатор в чат.
+ *
+ * Endpoint: `POST /chats/{chatId}/actions` с body `{action}`.
+ * MAX-клиент может проигнорировать индикатор визуально (поведение
+ * клиента, не бага ноды); API при этом всё равно вернёт 200.
+ */
+export async function sendAction(
+	this: IExecuteFunctions,
+	_bot: Bot,
+	chatId: number,
+	action: ChatAction,
+): Promise<any> {
+	if (!chatId || isNaN(chatId)) {
+		throw new Error('Chat ID is required and must be a number');
+	}
+	if (!CHAT_ACTIONS.includes(action)) {
+		throw new Error(`Unknown chat action: ${action}. Allowed: ${CHAT_ACTIONS.join(', ')}`);
+	}
+
+	try {
+		const credentials = await this.getCredentials('maxApi');
+		const baseUrl = (credentials['baseUrl'] as string) || DEFAULT_MAX_BASE_URL;
+		const accessToken = credentials['accessToken'] as string;
+
+		const result = await this.helpers.httpRequest({
+			method: 'POST',
+			url: `${baseUrl}/chats/${chatId}/actions`,
+			headers: {
+				...getAuthHeaders(accessToken),
+				'Content-Type': 'application/json',
+			},
+			body: { action },
+			json: true,
+		});
+
+		return result || { success: true, chat_id: chatId, action };
+	} catch (error) {
+		return await handleMaxApiError.call(this, error, 'send chat action');
+	}
+}
+
+/**
  * Validate keyboard layout and enforce Max API limits
  *
  * Validates the overall structure of an inline keyboard including row count,

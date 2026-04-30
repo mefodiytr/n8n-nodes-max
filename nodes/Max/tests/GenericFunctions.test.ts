@@ -26,6 +26,7 @@ import {
 	unpinMessage,
 	forwardMessage,
 	editChat,
+	sendAction,
 	validateKeyboardLayout,
 	formatInlineKeyboard,
 	createInlineKeyboardAttachment,
@@ -2907,6 +2908,111 @@ describe('GenericFunctions - Comprehensive Test Suite', () => {
 					editChat.call(scenario.mockExecuteFunctions, {} as any, TEST_CONSTANTS.IDS.VALID_CHAT, {
 						title: 'X',
 					}),
+				NodeApiError,
+				/Request failed/i,
+			);
+		});
+	});
+
+	describe('sendAction', () => {
+		let mockExecuteFunctions: Partial<IExecuteFunctions>;
+
+		beforeEach(() => {
+			const scenario = new MockScenarioBuilder()
+				.withCredentials({ accessToken: 'test-token' })
+				.withHttpResponse({ success: true })
+				.build();
+			mockExecuteFunctions = scenario.mockExecuteFunctions;
+		});
+
+		it('POST /chats/{chatId}/actions с body.action', async () => {
+			await sendAction.call(
+				mockExecuteFunctions as IExecuteFunctions,
+				{} as any,
+				TEST_CONSTANTS.IDS.VALID_CHAT,
+				'typing_on',
+			);
+			AssertionHelpers.expectHttpRequest(mockExecuteFunctions.helpers!.httpRequest as jest.Mock, {
+				method: 'POST',
+				url: `https://platform-api.max.ru/chats/${TEST_CONSTANTS.IDS.VALID_CHAT}/actions`,
+				body: { action: 'typing_on' },
+			});
+		});
+
+		it.each([
+			['mark_seen'],
+			['sending_audio'],
+			['sending_file'],
+			['sending_photo'],
+			['sending_video'],
+			['typing_on'],
+		])('принимает %s', async (action) => {
+			await sendAction.call(
+				mockExecuteFunctions as IExecuteFunctions,
+				{} as any,
+				TEST_CONSTANTS.IDS.VALID_CHAT,
+				action as any,
+			);
+			const call = (mockExecuteFunctions.helpers!.httpRequest as jest.Mock).mock.calls.pop()?.[0];
+			expect(call.body.action).toBe(action);
+		});
+
+		it('падает на неизвестный action', async () => {
+			await AssertionHelpers.expectAsyncError(
+				() =>
+					sendAction.call(
+						mockExecuteFunctions as IExecuteFunctions,
+						{} as any,
+						TEST_CONSTANTS.IDS.VALID_CHAT,
+						'invalid_action' as any,
+					),
+				Error,
+				/Unknown chat action/,
+			);
+		});
+
+		it('падает на NaN chatId', async () => {
+			await AssertionHelpers.expectAsyncError(
+				() =>
+					sendAction.call(
+						mockExecuteFunctions as IExecuteFunctions,
+						{} as any,
+						NaN as any,
+						'typing_on',
+					),
+				Error,
+				/Chat ID is required/,
+			);
+		});
+
+		it('возвращает default success-объект если API ответил null', async () => {
+			const scenario = new MockScenarioBuilder()
+				.withCredentials({ accessToken: 'test-token' })
+				.withHttpResponse(null)
+				.build();
+			const result = await sendAction.call(
+				scenario.mockExecuteFunctions,
+				{} as any,
+				TEST_CONSTANTS.IDS.VALID_CHAT,
+				'mark_seen',
+			);
+			expect(result.success).toBe(true);
+			expect(result.action).toBe('mark_seen');
+		});
+
+		it('оборачивает API-ошибку через handleMaxApiError', async () => {
+			const scenario = new MockScenarioBuilder()
+				.withCredentials({ accessToken: 'test-token' })
+				.withHttpError(new Error('API Error'))
+				.build();
+			await AssertionHelpers.expectAsyncError(
+				() =>
+					sendAction.call(
+						scenario.mockExecuteFunctions,
+						{} as any,
+						TEST_CONSTANTS.IDS.VALID_CHAT,
+						'typing_on',
+					),
 				NodeApiError,
 				/Request failed/i,
 			);

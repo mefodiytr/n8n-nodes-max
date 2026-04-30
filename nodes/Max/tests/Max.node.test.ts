@@ -14,6 +14,7 @@ jest.mock('../GenericFunctions', () => ({
 	unpinMessage: jest.fn().mockResolvedValue({ success: true }),
 	forwardMessage: jest.fn().mockResolvedValue({ message_id: 'fwd-1' }),
 	editChat: jest.fn().mockResolvedValue({ chat_id: 1, title: 'New' }),
+	sendAction: jest.fn().mockResolvedValue({ success: true }),
 	validateAndFormatText: jest.fn((text, _format) => text),
 	addAdditionalFields: jest.fn((params, fields) => ({ ...params, ...fields.additionalFields })),
 	handleAttachments: jest.fn().mockResolvedValue([]),
@@ -33,6 +34,7 @@ import {
 	unpinMessage,
 	forwardMessage,
 	editChat,
+	sendAction,
 	handleAttachments,
 } from '../GenericFunctions';
 
@@ -84,7 +86,7 @@ describe('Max Node', () => {
 			const chatOps = description.properties.find(
 				(p) => p.name === 'operation' && p.displayOptions?.show?.['resource']?.includes('chat'),
 			);
-			expect(chatOps?.options).toHaveLength(3);
+			expect(chatOps?.options).toHaveLength(4);
 		});
 
 		it('should expose token-based attachment input in the UI schema', () => {
@@ -621,6 +623,42 @@ describe('Max Node', () => {
 				};
 				const executeFunctions = getExecuteFunctionsMock(params);
 				await expect(maxNode.execute.call(executeFunctions)).rejects.toThrow('Chat ID is required');
+			});
+
+			it('should call sendAction with parsed chatId and action', async () => {
+				const params = {
+					resource: 'chat',
+					operation: 'sendAction',
+					chatId: '7',
+					chatAction: 'typing_on',
+				};
+				const executeFunctions = getExecuteFunctionsMock(params);
+				await maxNode.execute.call(executeFunctions);
+				expect(sendAction).toHaveBeenCalledWith(expect.anything(), 7, 'typing_on');
+			});
+
+			it('should throw on empty chat ID for sendAction', async () => {
+				const params = {
+					resource: 'chat',
+					operation: 'sendAction',
+					chatId: '',
+					chatAction: 'typing_on',
+				};
+				const executeFunctions = getExecuteFunctionsMock(params);
+				await expect(maxNode.execute.call(executeFunctions)).rejects.toThrow('Chat ID is required');
+			});
+
+			it('should throw on non-numeric chat ID for sendAction', async () => {
+				const params = {
+					resource: 'chat',
+					operation: 'sendAction',
+					chatId: 'abc',
+					chatAction: 'typing_on',
+				};
+				const executeFunctions = getExecuteFunctionsMock(params);
+				await expect(maxNode.execute.call(executeFunctions)).rejects.toThrow(
+					'Invalid Chat ID: "abc"',
+				);
 			});
 		});
 

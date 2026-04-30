@@ -19,6 +19,7 @@ import {
 	unpinMessage,
 	forwardMessage,
 	editChat,
+	sendAction,
 	validateAndFormatText,
 	addAdditionalFields,
 	handleAttachments,
@@ -990,6 +991,12 @@ export class Max implements INodeType {
 						value: 'leaveChat',
 						action: 'Leave a chat',
 					},
+					{
+						name: 'Send Action',
+						value: 'sendAction',
+						description: 'Send a chat action (typing, sending file, mark seen)',
+						action: 'Send a chat action',
+					},
 				],
 				default: 'getChatInfo',
 			},
@@ -1002,10 +1009,34 @@ export class Max implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['chat'],
-						operation: ['getChatInfo', 'leaveChat', 'editChat'],
+						operation: ['getChatInfo', 'leaveChat', 'editChat', 'sendAction'],
 					},
 				},
 				default: '',
+			},
+			// Send Action Operation
+			{
+				displayName: 'Action',
+				name: 'chatAction',
+				type: 'options',
+				required: true,
+				displayOptions: {
+					show: {
+						resource: ['chat'],
+						operation: ['sendAction'],
+					},
+				},
+				options: [
+					{ name: 'Mark Seen', value: 'mark_seen' },
+					{ name: 'Sending Audio', value: 'sending_audio' },
+					{ name: 'Sending File', value: 'sending_file' },
+					{ name: 'Sending Photo', value: 'sending_photo' },
+					{ name: 'Sending Video', value: 'sending_video' },
+					{ name: 'Typing On', value: 'typing_on' },
+				],
+				default: 'typing_on',
+				description:
+					'Note: typing_on may return 200 OK without showing the indicator visually — that is MAX client behavior, not a node bug',
 			},
 			// Edit Chat Operation
 			{
@@ -1585,6 +1616,35 @@ export class Max implements INodeType {
 							iconUrl: hasIcon ? iconUrl : undefined,
 							notify,
 						});
+
+						returnData.push({
+							json: responseData,
+							pairedItem: {
+								item: i,
+							},
+						});
+					} else if (operation === 'sendAction') {
+						const chatId = this.getNodeParameter('chatId', i) as string;
+						const chatAction = this.getNodeParameter('chatAction', i) as string;
+
+						if (!chatId || chatId.trim() === '') {
+							throw new NodeOperationError(
+								this.getNode(),
+								'Chat ID is required and cannot be empty',
+								{ itemIndex: i },
+							);
+						}
+						const chatIdNumber = parseInt(chatId.trim(), 10);
+						if (isNaN(chatIdNumber)) {
+							throw new NodeOperationError(
+								this.getNode(),
+								`Invalid Chat ID: "${chatId}". Must be a number.`,
+								{ itemIndex: i },
+							);
+						}
+
+						const bot = await createMaxBotInstance.call(this);
+						const responseData = await sendAction.call(this, bot, chatIdNumber, chatAction as any);
 
 						returnData.push({
 							json: responseData,
