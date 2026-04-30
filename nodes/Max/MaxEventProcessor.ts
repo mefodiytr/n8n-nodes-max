@@ -1,5 +1,13 @@
 import type { IWebhookFunctions, IDataObject, IWebhookResponseData } from 'n8n-workflow';
 import type { MaxWebhookEvent, MaxTriggerEvent } from './MaxTriggerConfig';
+import {
+	buildDedupKey,
+	isDuplicate,
+	pruneExpired,
+	readState,
+	record,
+	writeState,
+} from './EventDedupCache';
 
 /**
  * Event validation error interface
@@ -106,6 +114,12 @@ export class MaxEventProcessor {
 				return { workflowData: [] };
 			}
 
+			// Дедупликация: один и тот же webhook не должен запускать
+			// workflow дважды (ретраи / повторные доставки от MAX).
+			if (processor.isDuplicateDelivery.call(this, bodyData)) {
+				return { workflowData: [] };
+			}
+
 			console.log('Max Trigger - Event passed filters, triggering workflow');
 
 			// Process event-specific data and normalize
@@ -119,6 +133,42 @@ export class MaxEventProcessor {
 			console.log('Max Trigger - Error processing webhook:', error);
 			return { workflowData: [] };
 		}
+	}
+
+	/**
+	 * Проверить, был ли уже обработан этот webhook (дедуп).
+	 *
+	 * Состояние читается/пишется в `getWorkflowStaticData('node')` —
+	 * переживает рестарт workflow / процесса n8n. TTL 24 ч.
+	 *
+	 * Если у события нельзя построить дедуп-ключ (нет update_type или
+	 * timestamp) — пропускаем дедуп с предупреждением.
+	 *
+	 * @returns `true` если событие уже видели → workflow запускать не надо.
+	 */
+	public isDuplicateDelivery(this: IWebhookFunctions, bodyData: MaxWebhookEvent): boolean {
+		const key = buildDedupKey(bodyData);
+		if (key === null) {
+			this.logger.warn(
+				'Max Trigger - не удалось построить дедуп-ключ (нет update_type/timestamp), пропускаю дедуп',
+			);
+			return false;
+		}
+
+		const staticData = this.getWorkflowStaticData('node') as Record<string, unknown>;
+		const state = readState(staticData);
+		const now = Date.now();
+		pruneExpired(state, now);
+
+		if (isDuplicate(state, key)) {
+			this.logger.debug(`Max Trigger - дубликат update ${key}, пропускаю запуск workflow`);
+			writeState(staticData, state);
+			return true;
+		}
+
+		record(state, key, now);
+		writeState(staticData, state);
+		return false;
 	}
 
 	/**
@@ -450,7 +500,7 @@ export class MaxEventProcessor {
 		// Check for attachments - prioritize official API structure
 		const hasAttachments = Boolean(
 			(bodyData.message.body?.attachments && bodyData.message.body.attachments.length) ||
-				(bodyData.message.attachments && bodyData.message.attachments.length),
+			(bodyData.message.attachments && bodyData.message.attachments.length),
 		);
 
 		if (!hasText && !hasAttachments) {

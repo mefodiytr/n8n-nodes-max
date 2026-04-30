@@ -15,6 +15,13 @@ describe('MaxEventProcessor', () => {
 			helpers: {
 				returnJsonArray: jest.fn((data) => data),
 			} as any,
+			getWorkflowStaticData: jest.fn(() => ({})),
+			logger: {
+				debug: jest.fn(),
+				info: jest.fn(),
+				warn: jest.fn(),
+				error: jest.fn(),
+			} as any,
 		};
 	});
 
@@ -123,6 +130,105 @@ describe('MaxEventProcessor', () => {
 			);
 
 			expect(result.workflowData).toEqual([]);
+		});
+	});
+
+	describe('Дедупликация webhook-событий', () => {
+		const buildEvent = (mid: string): MaxWebhookEvent => ({
+			update_type: 'message_created',
+			timestamp: 1640995200000,
+			message: {
+				sender: { user_id: 1, is_bot: false },
+				recipient: { chat_id: 123, chat_type: 'dialog' },
+				timestamp: 1640995200000,
+				body: { mid, seq: 1, text: 'hi' },
+			},
+		});
+
+		it('второй приём того же события не запускает workflow', async () => {
+			// Общий staticData между двумя вызовами — иначе нет смысла.
+			const sharedStatic: Record<string, unknown> = {};
+			(mockWebhookFunctions.getWorkflowStaticData as jest.Mock).mockReturnValue(sharedStatic);
+
+			const event = buildEvent('msg_dup');
+
+			(mockWebhookFunctions.getBodyData as jest.Mock).mockReturnValue(event);
+			(mockWebhookFunctions.getNodeParameter as jest.Mock)
+				.mockReturnValueOnce({})
+				.mockReturnValueOnce(['message_created'])
+				.mockReturnValueOnce({})
+				.mockReturnValueOnce(['message_created']);
+
+			const first = await eventProcessor.processWebhookEvent.call(
+				mockWebhookFunctions as IWebhookFunctions,
+			);
+			expect(first.workflowData).toHaveLength(1);
+
+			const second = await eventProcessor.processWebhookEvent.call(
+				mockWebhookFunctions as IWebhookFunctions,
+			);
+			expect(second.workflowData).toEqual([]);
+		});
+
+		it('разные события с разными mid обрабатываются оба раза', async () => {
+			const sharedStatic: Record<string, unknown> = {};
+			(mockWebhookFunctions.getWorkflowStaticData as jest.Mock).mockReturnValue(sharedStatic);
+
+			(mockWebhookFunctions.getBodyData as jest.Mock)
+				.mockReturnValueOnce(buildEvent('a'))
+				.mockReturnValueOnce(buildEvent('b'));
+			(mockWebhookFunctions.getNodeParameter as jest.Mock)
+				.mockReturnValueOnce({})
+				.mockReturnValueOnce(['message_created'])
+				.mockReturnValueOnce({})
+				.mockReturnValueOnce(['message_created']);
+
+			const r1 = await eventProcessor.processWebhookEvent.call(
+				mockWebhookFunctions as IWebhookFunctions,
+			);
+			const r2 = await eventProcessor.processWebhookEvent.call(
+				mockWebhookFunctions as IWebhookFunctions,
+			);
+			expect(r1.workflowData).toHaveLength(1);
+			expect(r2.workflowData).toHaveLength(1);
+		});
+
+		it('дедуп переживает рестарт: чужое staticData с уже виденным ключом блокирует', async () => {
+			const event = buildEvent('msg_persisted');
+			// Имитируем, что предыдущий запуск n8n уже записал ключ.
+			const persistedStatic: Record<string, unknown> = {
+				_dedup: {
+					recent: [
+						{
+							key: 'message_created:m:msg_persisted:1640995200000',
+							ts: Date.now(),
+						},
+					],
+				},
+			};
+			(mockWebhookFunctions.getWorkflowStaticData as jest.Mock).mockReturnValue(persistedStatic);
+			(mockWebhookFunctions.getBodyData as jest.Mock).mockReturnValue(event);
+			(mockWebhookFunctions.getNodeParameter as jest.Mock)
+				.mockReturnValueOnce({})
+				.mockReturnValueOnce(['message_created']);
+
+			const result = await eventProcessor.processWebhookEvent.call(
+				mockWebhookFunctions as IWebhookFunctions,
+			);
+			expect(result.workflowData).toEqual([]);
+		});
+
+		it('isDuplicateDelivery: событие без update_type → false (без падения), warn в лог', () => {
+			const sharedStatic: Record<string, unknown> = {};
+			(mockWebhookFunctions.getWorkflowStaticData as jest.Mock).mockReturnValue(sharedStatic);
+			const broken = { timestamp: 1 } as unknown as MaxWebhookEvent;
+
+			const result = eventProcessor.isDuplicateDelivery.call(
+				mockWebhookFunctions as IWebhookFunctions,
+				broken,
+			);
+			expect(result).toBe(false);
+			expect((mockWebhookFunctions.logger as any).warn).toHaveBeenCalled();
 		});
 	});
 
