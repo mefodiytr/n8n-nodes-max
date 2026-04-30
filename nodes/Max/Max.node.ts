@@ -17,6 +17,7 @@ import {
 	leaveChat,
 	pinMessage,
 	unpinMessage,
+	forwardMessage,
 	validateAndFormatText,
 	addAdditionalFields,
 	handleAttachments,
@@ -108,6 +109,12 @@ export class Max implements INodeType {
 						value: 'editMessage',
 						description: 'Edit an existing message',
 						action: 'Edit a message',
+					},
+					{
+						name: 'Forward Message',
+						value: 'forwardMessage',
+						description: 'Forward a message to another chat',
+						action: 'Forward a message',
 					},
 					{
 						name: 'Pin Message',
@@ -885,6 +892,49 @@ export class Max implements INodeType {
 				default: '',
 				description: 'Group chat ID. Pin/Unpin works only in group chats.',
 			},
+			// Forward Message Operation
+			{
+				displayName: 'From Chat ID',
+				name: 'fromChatId',
+				type: 'string',
+				displayOptions: {
+					show: {
+						resource: ['message'],
+						operation: ['forwardMessage'],
+					},
+				},
+				default: '',
+				description:
+					'Source chat ID (informational only — MAX API determines source by message_id; the field helps you not lose context in n8n)',
+			},
+			{
+				displayName: 'Message ID',
+				name: 'messageId',
+				type: 'string',
+				required: true,
+				displayOptions: {
+					show: {
+						resource: ['message'],
+						operation: ['forwardMessage'],
+					},
+				},
+				default: '',
+				description: 'Source message ID to forward',
+			},
+			{
+				displayName: 'To Chat ID',
+				name: 'toChatId',
+				type: 'string',
+				required: true,
+				displayOptions: {
+					show: {
+						resource: ['message'],
+						operation: ['forwardMessage'],
+					},
+				},
+				default: '',
+				description: 'Target chat ID to forward the message to',
+			},
 			{
 				displayName: 'Message ID',
 				name: 'messageId',
@@ -1308,6 +1358,45 @@ export class Max implements INodeType {
 
 						const bot = await createMaxBotInstance.call(this);
 						const responseData = await unpinMessage.call(this, bot, chatIdNumber);
+
+						returnData.push({
+							json: responseData,
+							pairedItem: {
+								item: i,
+							},
+						});
+					} else if (operation === 'forwardMessage') {
+						const toChatIdRaw = this.getNodeParameter('toChatId', i) as string;
+						const messageId = this.getNodeParameter('messageId', i) as string;
+
+						if (!toChatIdRaw || toChatIdRaw.trim() === '') {
+							throw new NodeOperationError(
+								this.getNode(),
+								'To Chat ID is required and cannot be empty',
+								{ itemIndex: i },
+							);
+						}
+						const toChatIdNumber = parseInt(toChatIdRaw.trim(), 10);
+						if (isNaN(toChatIdNumber)) {
+							throw new NodeOperationError(this.getNode(), 'To Chat ID must be a valid number', {
+								itemIndex: i,
+							});
+						}
+						if (!messageId || messageId.trim() === '') {
+							throw new NodeOperationError(
+								this.getNode(),
+								'Message ID is required and cannot be empty',
+								{ itemIndex: i },
+							);
+						}
+
+						const bot = await createMaxBotInstance.call(this);
+						const responseData = await forwardMessage.call(
+							this,
+							bot,
+							toChatIdNumber,
+							messageId.trim(),
+						);
 
 						returnData.push({
 							json: responseData,

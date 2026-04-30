@@ -24,6 +24,7 @@ import {
 	leaveChat,
 	pinMessage,
 	unpinMessage,
+	forwardMessage,
 	validateKeyboardLayout,
 	formatInlineKeyboard,
 	createInlineKeyboardAttachment,
@@ -2695,6 +2696,106 @@ describe('GenericFunctions - Comprehensive Test Suite', () => {
 						scenario.mockExecuteFunctions,
 						{} as any,
 						TEST_CONSTANTS.IDS.VALID_CHAT,
+					),
+				NodeApiError,
+				/Request failed/i,
+			);
+		});
+	});
+
+	describe('forwardMessage', () => {
+		let mockExecuteFunctions: Partial<IExecuteFunctions>;
+
+		beforeEach(() => {
+			const scenario = new MockScenarioBuilder()
+				.withCredentials({ accessToken: 'test-token' })
+				.withHttpResponse({ message_id: 'fwd-1' })
+				.build();
+			mockExecuteFunctions = scenario.mockExecuteFunctions;
+		});
+
+		it('POST /messages?chat_id={target} с body link.type=forward', async () => {
+			await forwardMessage.call(
+				mockExecuteFunctions as IExecuteFunctions,
+				{} as any,
+				TEST_CONSTANTS.IDS.VALID_CHAT,
+				'src-1',
+			);
+			AssertionHelpers.expectHttpRequest(mockExecuteFunctions.helpers!.httpRequest as jest.Mock, {
+				method: 'POST',
+				url: 'https://platform-api.max.ru/messages',
+				qs: { chat_id: TEST_CONSTANTS.IDS.VALID_CHAT },
+				body: { link: { type: 'forward', message_id: 'src-1' } },
+			});
+		});
+
+		it('обрезает пробелы в sourceMessageId', async () => {
+			await forwardMessage.call(
+				mockExecuteFunctions as IExecuteFunctions,
+				{} as any,
+				TEST_CONSTANTS.IDS.VALID_CHAT,
+				'  src-2  ',
+			);
+			const call = (mockExecuteFunctions.helpers!.httpRequest as jest.Mock).mock.calls[0]?.[0];
+			expect(call.body.link.message_id).toBe('src-2');
+		});
+
+		it('возвращает default success-объект если API ответил null', async () => {
+			const scenario = new MockScenarioBuilder()
+				.withCredentials({ accessToken: 'test-token' })
+				.withHttpResponse(null)
+				.build();
+			const result = await forwardMessage.call(
+				scenario.mockExecuteFunctions,
+				{} as any,
+				TEST_CONSTANTS.IDS.VALID_CHAT,
+				'src-3',
+			);
+			expect(result.success).toBe(true);
+			expect(result.chat_id).toBe(TEST_CONSTANTS.IDS.VALID_CHAT);
+			expect(result.message_id).toBe('src-3');
+		});
+
+		it('падает на пустой sourceMessageId', async () => {
+			await AssertionHelpers.expectAsyncError(
+				() =>
+					forwardMessage.call(
+						mockExecuteFunctions as IExecuteFunctions,
+						{} as any,
+						TEST_CONSTANTS.IDS.VALID_CHAT,
+						'   ',
+					),
+				Error,
+				/Source Message ID is required/,
+			);
+		});
+
+		it('падает на NaN targetChatId', async () => {
+			await AssertionHelpers.expectAsyncError(
+				() =>
+					forwardMessage.call(
+						mockExecuteFunctions as IExecuteFunctions,
+						{} as any,
+						NaN as any,
+						'src-4',
+					),
+				Error,
+				/Target Chat ID is required/,
+			);
+		});
+
+		it('оборачивает API-ошибку через handleMaxApiError', async () => {
+			const scenario = new MockScenarioBuilder()
+				.withCredentials({ accessToken: 'test-token' })
+				.withHttpError(new Error('API Error'))
+				.build();
+			await AssertionHelpers.expectAsyncError(
+				() =>
+					forwardMessage.call(
+						scenario.mockExecuteFunctions,
+						{} as any,
+						TEST_CONSTANTS.IDS.VALID_CHAT,
+						'src-5',
 					),
 				NodeApiError,
 				/Request failed/i,

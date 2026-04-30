@@ -12,6 +12,7 @@ jest.mock('../GenericFunctions', () => ({
 	leaveChat: jest.fn().mockResolvedValue({ success: true }),
 	pinMessage: jest.fn().mockResolvedValue({ success: true }),
 	unpinMessage: jest.fn().mockResolvedValue({ success: true }),
+	forwardMessage: jest.fn().mockResolvedValue({ message_id: 'fwd-1' }),
 	validateAndFormatText: jest.fn((text, _format) => text),
 	addAdditionalFields: jest.fn((params, fields) => ({ ...params, ...fields.additionalFields })),
 	handleAttachments: jest.fn().mockResolvedValue([]),
@@ -29,6 +30,7 @@ import {
 	leaveChat,
 	pinMessage,
 	unpinMessage,
+	forwardMessage,
 	handleAttachments,
 } from '../GenericFunctions';
 
@@ -75,7 +77,7 @@ describe('Max Node', () => {
 			const messageOps = description.properties.find(
 				(p) => p.name === 'operation' && p.displayOptions?.show?.['resource']?.includes('message'),
 			);
-			expect(messageOps?.options).toHaveLength(6);
+			expect(messageOps?.options).toHaveLength(7);
 
 			const chatOps = description.properties.find(
 				(p) => p.name === 'operation' && p.displayOptions?.show?.['resource']?.includes('chat'),
@@ -304,6 +306,58 @@ describe('Max Node', () => {
 				const executeFunctions = getExecuteFunctionsMock(params);
 				await expect(maxNode.execute.call(executeFunctions)).rejects.toThrow(
 					'Chat ID must be a valid number',
+				);
+			});
+
+			it('should call forwardMessage with parsed toChatId and trimmed messageId', async () => {
+				const params = {
+					resource: 'message',
+					operation: 'forwardMessage',
+					fromChatId: '111',
+					toChatId: '222',
+					messageId: ' src-msg ',
+				};
+				const executeFunctions = getExecuteFunctionsMock(params);
+				await maxNode.execute.call(executeFunctions);
+				expect(forwardMessage).toHaveBeenCalledWith(expect.anything(), 222, 'src-msg');
+			});
+
+			it('should throw on empty target Chat ID for forwardMessage', async () => {
+				const params = {
+					resource: 'message',
+					operation: 'forwardMessage',
+					toChatId: '',
+					messageId: 'm',
+				};
+				const executeFunctions = getExecuteFunctionsMock(params);
+				await expect(maxNode.execute.call(executeFunctions)).rejects.toThrow(
+					'To Chat ID is required',
+				);
+			});
+
+			it('should throw on non-numeric target Chat ID for forwardMessage', async () => {
+				const params = {
+					resource: 'message',
+					operation: 'forwardMessage',
+					toChatId: 'abc',
+					messageId: 'm',
+				};
+				const executeFunctions = getExecuteFunctionsMock(params);
+				await expect(maxNode.execute.call(executeFunctions)).rejects.toThrow(
+					'To Chat ID must be a valid number',
+				);
+			});
+
+			it('should throw on empty messageId for forwardMessage', async () => {
+				const params = {
+					resource: 'message',
+					operation: 'forwardMessage',
+					toChatId: '5',
+					messageId: '',
+				};
+				const executeFunctions = getExecuteFunctionsMock(params);
+				await expect(maxNode.execute.call(executeFunctions)).rejects.toThrow(
+					'Message ID is required',
 				);
 			});
 		});

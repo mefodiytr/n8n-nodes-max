@@ -1881,6 +1881,59 @@ export async function unpinMessage(
 }
 
 /**
+ * Перенаправить (forward) сообщение в другой чат.
+ *
+ * В MAX нет отдельного endpoint'а forward — пересылка делается
+ * через `POST /messages?chat_id={target}` с body
+ * `{link: {type: 'forward', message_id: '<src>'}}`.
+ *
+ * @param targetChatId — куда пересылаем (chat_id получателя).
+ * @param sourceMessageId — ID исходного сообщения.
+ */
+export async function forwardMessage(
+	this: IExecuteFunctions,
+	_bot: Bot,
+	targetChatId: number,
+	sourceMessageId: string,
+): Promise<any> {
+	if (!targetChatId || isNaN(targetChatId)) {
+		throw new Error('Target Chat ID is required and must be a number');
+	}
+	if (!sourceMessageId || sourceMessageId.trim() === '') {
+		throw new Error('Source Message ID is required and cannot be empty');
+	}
+
+	try {
+		const credentials = await this.getCredentials('maxApi');
+		const baseUrl = (credentials['baseUrl'] as string) || DEFAULT_MAX_BASE_URL;
+		const accessToken = credentials['accessToken'] as string;
+
+		const result = await this.helpers.httpRequest({
+			method: 'POST',
+			url: `${baseUrl}/messages`,
+			qs: {
+				chat_id: targetChatId,
+			},
+			headers: {
+				...getAuthHeaders(accessToken),
+				'Content-Type': 'application/json',
+			},
+			body: {
+				link: {
+					type: 'forward',
+					message_id: sourceMessageId.trim(),
+				},
+			},
+			json: true,
+		});
+
+		return result || { success: true, chat_id: targetChatId, message_id: sourceMessageId.trim() };
+	} catch (error) {
+		return await handleMaxApiError.call(this, error, 'forward message');
+	}
+}
+
+/**
  * Validate keyboard layout and enforce Max API limits
  *
  * Validates the overall structure of an inline keyboard including row count,
