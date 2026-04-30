@@ -1845,6 +1845,42 @@ export async function pinMessage(
 }
 
 /**
+ * Открепить сообщение в чате через Max Bot API.
+ *
+ * Endpoint: `DELETE /chats/{chatId}/pin`. Открепляет текущее
+ * закреплённое сообщение в групповом чате; в API нет параметра
+ * `message_id` — открепляется то, что было закреплено последним.
+ *
+ * Работает только в групповых чатах. Требуется permission `pin_message`.
+ */
+export async function unpinMessage(
+	this: IExecuteFunctions,
+	_bot: Bot,
+	chatId: number,
+): Promise<any> {
+	if (!chatId || isNaN(chatId)) {
+		throw new Error('Chat ID is required and must be a number');
+	}
+
+	try {
+		const credentials = await this.getCredentials('maxApi');
+		const baseUrl = (credentials['baseUrl'] as string) || DEFAULT_MAX_BASE_URL;
+		const accessToken = credentials['accessToken'] as string;
+
+		const result = await this.helpers.httpRequest({
+			method: 'DELETE',
+			url: `${baseUrl}/chats/${chatId}/pin`,
+			headers: getAuthHeaders(accessToken),
+			json: true,
+		});
+
+		return result || { success: true, chat_id: chatId };
+	} catch (error) {
+		return await handleMaxApiError.call(this, error, 'unpin message');
+	}
+}
+
+/**
  * Validate keyboard layout and enforce Max API limits
  *
  * Validates the overall structure of an inline keyboard including row count,

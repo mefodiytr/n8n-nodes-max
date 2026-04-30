@@ -23,6 +23,7 @@ import {
 	getChatInfo,
 	leaveChat,
 	pinMessage,
+	unpinMessage,
 	validateKeyboardLayout,
 	formatInlineKeyboard,
 	createInlineKeyboardAttachment,
@@ -2631,6 +2632,69 @@ describe('GenericFunctions - Comprehensive Test Suite', () => {
 						{} as any,
 						TEST_CONSTANTS.IDS.VALID_CHAT,
 						'msg-6',
+					),
+				NodeApiError,
+				/Request failed/i,
+			);
+		});
+	});
+
+	describe('unpinMessage', () => {
+		let mockExecuteFunctions: Partial<IExecuteFunctions>;
+
+		beforeEach(() => {
+			const scenario = new MockScenarioBuilder()
+				.withCredentials({ accessToken: 'test-token' })
+				.withHttpResponse({ success: true })
+				.build();
+			mockExecuteFunctions = scenario.mockExecuteFunctions;
+		});
+
+		it('DELETE /chats/{chatId}/pin без message_id', async () => {
+			await unpinMessage.call(
+				mockExecuteFunctions as IExecuteFunctions,
+				{} as any,
+				TEST_CONSTANTS.IDS.VALID_CHAT,
+			);
+			AssertionHelpers.expectHttpRequest(mockExecuteFunctions.helpers!.httpRequest as jest.Mock, {
+				method: 'DELETE',
+				url: `https://platform-api.max.ru/chats/${TEST_CONSTANTS.IDS.VALID_CHAT}/pin`,
+			});
+		});
+
+		it('возвращает default success-объект если API ответил null', async () => {
+			const scenario = new MockScenarioBuilder()
+				.withCredentials({ accessToken: 'test-token' })
+				.withHttpResponse(null)
+				.build();
+			const result = await unpinMessage.call(
+				scenario.mockExecuteFunctions,
+				{} as any,
+				TEST_CONSTANTS.IDS.VALID_CHAT,
+			);
+			expect(result.success).toBe(true);
+			expect(result.chat_id).toBe(TEST_CONSTANTS.IDS.VALID_CHAT);
+		});
+
+		it('падает на NaN chatId', async () => {
+			await AssertionHelpers.expectAsyncError(
+				() => unpinMessage.call(mockExecuteFunctions as IExecuteFunctions, {} as any, NaN as any),
+				Error,
+				/Chat ID is required/,
+			);
+		});
+
+		it('оборачивает API-ошибку через handleMaxApiError', async () => {
+			const scenario = new MockScenarioBuilder()
+				.withCredentials({ accessToken: 'test-token' })
+				.withHttpError(new Error('API Error'))
+				.build();
+			await AssertionHelpers.expectAsyncError(
+				() =>
+					unpinMessage.call(
+						scenario.mockExecuteFunctions,
+						{} as any,
+						TEST_CONSTANTS.IDS.VALID_CHAT,
 					),
 				NodeApiError,
 				/Request failed/i,

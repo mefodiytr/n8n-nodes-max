@@ -16,6 +16,7 @@ import {
 	getChatInfo,
 	leaveChat,
 	pinMessage,
+	unpinMessage,
 	validateAndFormatText,
 	addAdditionalFields,
 	handleAttachments,
@@ -119,6 +120,12 @@ export class Max implements INodeType {
 						value: 'sendMessage',
 						description: 'Send a message',
 						action: 'Send a message',
+					},
+					{
+						name: 'Unpin Message',
+						value: 'unpinMessage',
+						description: 'Unpin the currently pinned message in a group chat',
+						action: 'Unpin a message',
 					},
 				],
 				default: 'sendMessage',
@@ -863,7 +870,7 @@ export class Max implements INodeType {
 				default: '',
 				description: 'Notification text. Optional.',
 			},
-			// Pin Message Operation
+			// Pin / Unpin Message Operations
 			{
 				displayName: 'Chat ID',
 				name: 'chatId',
@@ -872,11 +879,11 @@ export class Max implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['message'],
-						operation: ['pinMessage'],
+						operation: ['pinMessage', 'unpinMessage'],
 					},
 				},
 				default: '',
-				description: 'Group chat ID. Pinning works only in group chats.',
+				description: 'Group chat ID. Pin/Unpin works only in group chats.',
 			},
 			{
 				displayName: 'Message ID',
@@ -1275,6 +1282,32 @@ export class Max implements INodeType {
 							messageId.trim(),
 							notify,
 						);
+
+						returnData.push({
+							json: responseData,
+							pairedItem: {
+								item: i,
+							},
+						});
+					} else if (operation === 'unpinMessage') {
+						const chatIdRaw = this.getNodeParameter('chatId', i) as string;
+
+						if (!chatIdRaw || chatIdRaw.trim() === '') {
+							throw new NodeOperationError(
+								this.getNode(),
+								'Chat ID is required and cannot be empty',
+								{ itemIndex: i },
+							);
+						}
+						const chatIdNumber = parseInt(chatIdRaw.trim(), 10);
+						if (isNaN(chatIdNumber)) {
+							throw new NodeOperationError(this.getNode(), 'Chat ID must be a valid number', {
+								itemIndex: i,
+							});
+						}
+
+						const bot = await createMaxBotInstance.call(this);
+						const responseData = await unpinMessage.call(this, bot, chatIdNumber);
 
 						returnData.push({
 							json: responseData,

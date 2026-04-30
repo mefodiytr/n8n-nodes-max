@@ -11,6 +11,7 @@ jest.mock('../GenericFunctions', () => ({
 	getChatInfo: jest.fn().mockResolvedValue({ id: 'chat-123', title: 'Test Chat' }),
 	leaveChat: jest.fn().mockResolvedValue({ success: true }),
 	pinMessage: jest.fn().mockResolvedValue({ success: true }),
+	unpinMessage: jest.fn().mockResolvedValue({ success: true }),
 	validateAndFormatText: jest.fn((text, _format) => text),
 	addAdditionalFields: jest.fn((params, fields) => ({ ...params, ...fields.additionalFields })),
 	handleAttachments: jest.fn().mockResolvedValue([]),
@@ -27,6 +28,7 @@ import {
 	getChatInfo,
 	leaveChat,
 	pinMessage,
+	unpinMessage,
 	handleAttachments,
 } from '../GenericFunctions';
 
@@ -73,7 +75,7 @@ describe('Max Node', () => {
 			const messageOps = description.properties.find(
 				(p) => p.name === 'operation' && p.displayOptions?.show?.['resource']?.includes('message'),
 			);
-			expect(messageOps?.options).toHaveLength(5);
+			expect(messageOps?.options).toHaveLength(6);
 
 			const chatOps = description.properties.find(
 				(p) => p.name === 'operation' && p.displayOptions?.show?.['resource']?.includes('chat'),
@@ -278,6 +280,27 @@ describe('Max Node', () => {
 					messageId: 'm',
 					notify: true,
 				};
+				const executeFunctions = getExecuteFunctionsMock(params);
+				await expect(maxNode.execute.call(executeFunctions)).rejects.toThrow(
+					'Chat ID must be a valid number',
+				);
+			});
+
+			it('should call unpinMessage with parsed chatId', async () => {
+				const params = { resource: 'message', operation: 'unpinMessage', chatId: '321' };
+				const executeFunctions = getExecuteFunctionsMock(params);
+				await maxNode.execute.call(executeFunctions);
+				expect(unpinMessage).toHaveBeenCalledWith(expect.anything(), 321);
+			});
+
+			it('should throw on empty chat ID for unpinMessage', async () => {
+				const params = { resource: 'message', operation: 'unpinMessage', chatId: '' };
+				const executeFunctions = getExecuteFunctionsMock(params);
+				await expect(maxNode.execute.call(executeFunctions)).rejects.toThrow('Chat ID is required');
+			});
+
+			it('should throw on non-numeric chat ID for unpinMessage', async () => {
+				const params = { resource: 'message', operation: 'unpinMessage', chatId: 'abc' };
 				const executeFunctions = getExecuteFunctionsMock(params);
 				await expect(maxNode.execute.call(executeFunctions)).rejects.toThrow(
 					'Chat ID must be a valid number',
