@@ -15,6 +15,7 @@ import {
 	answerCallbackQuery,
 	getChatInfo,
 	leaveChat,
+	pinMessage,
 	validateAndFormatText,
 	addAdditionalFields,
 	handleAttachments,
@@ -90,16 +91,10 @@ export class Max implements INodeType {
 				},
 				options: [
 					{
-						name: 'Send Message',
-						value: 'sendMessage',
-						description: 'Send a message',
-						action: 'Send a message',
-					},
-					{
-						name: 'Edit Message',
-						value: 'editMessage',
-						description: 'Edit an existing message',
-						action: 'Edit a message',
+						name: 'Answer Callback Query',
+						value: 'answerCallbackQuery',
+						description: 'Answer a callback query from an inline keyboard button',
+						action: 'Answer a callback query',
 					},
 					{
 						name: 'Delete Message',
@@ -108,10 +103,22 @@ export class Max implements INodeType {
 						action: 'Delete a message',
 					},
 					{
-						name: 'Answer Callback Query',
-						value: 'answerCallbackQuery',
-						description: 'Answer a callback query from an inline keyboard button',
-						action: 'Answer a callback query',
+						name: 'Edit Message',
+						value: 'editMessage',
+						description: 'Edit an existing message',
+						action: 'Edit a message',
+					},
+					{
+						name: 'Pin Message',
+						value: 'pinMessage',
+						description: 'Pin a message in a group chat',
+						action: 'Pin a message',
+					},
+					{
+						name: 'Send Message',
+						value: 'sendMessage',
+						description: 'Send a message',
+						action: 'Send a message',
 					},
 				],
 				default: 'sendMessage',
@@ -856,6 +863,47 @@ export class Max implements INodeType {
 				default: '',
 				description: 'Notification text. Optional.',
 			},
+			// Pin Message Operation
+			{
+				displayName: 'Chat ID',
+				name: 'chatId',
+				type: 'string',
+				required: true,
+				displayOptions: {
+					show: {
+						resource: ['message'],
+						operation: ['pinMessage'],
+					},
+				},
+				default: '',
+				description: 'Group chat ID. Pinning works only in group chats.',
+			},
+			{
+				displayName: 'Message ID',
+				name: 'messageId',
+				type: 'string',
+				required: true,
+				displayOptions: {
+					show: {
+						resource: ['message'],
+						operation: ['pinMessage'],
+					},
+				},
+				default: '',
+			},
+			{
+				displayName: 'Notify Members',
+				name: 'notify',
+				type: 'boolean',
+				displayOptions: {
+					show: {
+						resource: ['message'],
+						operation: ['pinMessage'],
+					},
+				},
+				default: true,
+				description: 'Whether to notify chat members about the pinned message',
+			},
 			// Chat Resource
 			{
 				displayName: 'Operation',
@@ -1185,6 +1233,47 @@ export class Max implements INodeType {
 							bot,
 							callbackQueryId.trim(),
 							text,
+						);
+
+						returnData.push({
+							json: responseData,
+							pairedItem: {
+								item: i,
+							},
+						});
+					} else if (operation === 'pinMessage') {
+						const chatIdRaw = this.getNodeParameter('chatId', i) as string;
+						const messageId = this.getNodeParameter('messageId', i) as string;
+						const notify = this.getNodeParameter('notify', i, true) as boolean;
+
+						if (!chatIdRaw || chatIdRaw.trim() === '') {
+							throw new NodeOperationError(
+								this.getNode(),
+								'Chat ID is required and cannot be empty',
+								{ itemIndex: i },
+							);
+						}
+						const chatIdNumber = parseInt(chatIdRaw.trim(), 10);
+						if (isNaN(chatIdNumber)) {
+							throw new NodeOperationError(this.getNode(), 'Chat ID must be a valid number', {
+								itemIndex: i,
+							});
+						}
+						if (!messageId || messageId.trim() === '') {
+							throw new NodeOperationError(
+								this.getNode(),
+								'Message ID is required and cannot be empty',
+								{ itemIndex: i },
+							);
+						}
+
+						const bot = await createMaxBotInstance.call(this);
+						const responseData = await pinMessage.call(
+							this,
+							bot,
+							chatIdNumber,
+							messageId.trim(),
+							notify,
 						);
 
 						returnData.push({

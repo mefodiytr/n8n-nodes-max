@@ -10,6 +10,7 @@ jest.mock('../GenericFunctions', () => ({
 	answerCallbackQuery: jest.fn().mockResolvedValue({ success: true }),
 	getChatInfo: jest.fn().mockResolvedValue({ id: 'chat-123', title: 'Test Chat' }),
 	leaveChat: jest.fn().mockResolvedValue({ success: true }),
+	pinMessage: jest.fn().mockResolvedValue({ success: true }),
 	validateAndFormatText: jest.fn((text, _format) => text),
 	addAdditionalFields: jest.fn((params, fields) => ({ ...params, ...fields.additionalFields })),
 	handleAttachments: jest.fn().mockResolvedValue([]),
@@ -25,6 +26,7 @@ import {
 	answerCallbackQuery,
 	getChatInfo,
 	leaveChat,
+	pinMessage,
 	handleAttachments,
 } from '../GenericFunctions';
 
@@ -71,7 +73,7 @@ describe('Max Node', () => {
 			const messageOps = description.properties.find(
 				(p) => p.name === 'operation' && p.displayOptions?.show?.['resource']?.includes('message'),
 			);
-			expect(messageOps?.options).toHaveLength(4);
+			expect(messageOps?.options).toHaveLength(5);
 
 			const chatOps = description.properties.find(
 				(p) => p.name === 'operation' && p.displayOptions?.show?.['resource']?.includes('chat'),
@@ -214,6 +216,72 @@ describe('Max Node', () => {
 				const executeFunctions = getExecuteFunctionsMock(params);
 				await maxNode.execute.call(executeFunctions);
 				expect(answerCallbackQuery).toHaveBeenCalledWith(expect.anything(), 'cbq-123', 'Alert!');
+			});
+
+			it('should call pinMessage with parsed chatId and notify', async () => {
+				const params = {
+					resource: 'message',
+					operation: 'pinMessage',
+					chatId: '12345',
+					messageId: 'msg-pin',
+					notify: true,
+				};
+				const executeFunctions = getExecuteFunctionsMock(params);
+				await maxNode.execute.call(executeFunctions);
+				expect(pinMessage).toHaveBeenCalledWith(expect.anything(), 12345, 'msg-pin', true);
+			});
+
+			it('should pass notify=false through pinMessage', async () => {
+				const params = {
+					resource: 'message',
+					operation: 'pinMessage',
+					chatId: '99',
+					messageId: 'msg-x',
+					notify: false,
+				};
+				const executeFunctions = getExecuteFunctionsMock(params);
+				await maxNode.execute.call(executeFunctions);
+				expect(pinMessage).toHaveBeenCalledWith(expect.anything(), 99, 'msg-x', false);
+			});
+
+			it('should throw on empty chat ID for pinMessage', async () => {
+				const params = {
+					resource: 'message',
+					operation: 'pinMessage',
+					chatId: '',
+					messageId: 'm',
+					notify: true,
+				};
+				const executeFunctions = getExecuteFunctionsMock(params);
+				await expect(maxNode.execute.call(executeFunctions)).rejects.toThrow('Chat ID is required');
+			});
+
+			it('should throw on empty message ID for pinMessage', async () => {
+				const params = {
+					resource: 'message',
+					operation: 'pinMessage',
+					chatId: '5',
+					messageId: '',
+					notify: true,
+				};
+				const executeFunctions = getExecuteFunctionsMock(params);
+				await expect(maxNode.execute.call(executeFunctions)).rejects.toThrow(
+					'Message ID is required',
+				);
+			});
+
+			it('should throw on non-numeric chat ID for pinMessage', async () => {
+				const params = {
+					resource: 'message',
+					operation: 'pinMessage',
+					chatId: 'abc',
+					messageId: 'm',
+					notify: true,
+				};
+				const executeFunctions = getExecuteFunctionsMock(params);
+				await expect(maxNode.execute.call(executeFunctions)).rejects.toThrow(
+					'Chat ID must be a valid number',
+				);
 			});
 		});
 		describe('sendMessage with userId validation', () => {

@@ -22,6 +22,7 @@ import {
 	validateKeyboardButton,
 	getChatInfo,
 	leaveChat,
+	pinMessage,
 	validateKeyboardLayout,
 	formatInlineKeyboard,
 	createInlineKeyboardAttachment,
@@ -2518,6 +2519,119 @@ describe('GenericFunctions - Comprehensive Test Suite', () => {
 			await AssertionHelpers.expectAsyncError(
 				() =>
 					leaveChat.call(scenario.mockExecuteFunctions, {} as any, TEST_CONSTANTS.IDS.VALID_CHAT),
+				NodeApiError,
+				/Request failed/i,
+			);
+		});
+	});
+
+	describe('pinMessage', () => {
+		let mockExecuteFunctions: Partial<IExecuteFunctions>;
+
+		beforeEach(() => {
+			const scenario = new MockScenarioBuilder()
+				.withCredentials({ accessToken: 'test-token' })
+				.withHttpResponse({ success: true })
+				.build();
+			mockExecuteFunctions = scenario.mockExecuteFunctions;
+		});
+
+		it('PUT /chats/{chatId}/pin с message_id и notify=true (default)', async () => {
+			await pinMessage.call(
+				mockExecuteFunctions as IExecuteFunctions,
+				{} as any,
+				TEST_CONSTANTS.IDS.VALID_CHAT,
+				'msg-1',
+			);
+			AssertionHelpers.expectHttpRequest(mockExecuteFunctions.helpers!.httpRequest as jest.Mock, {
+				method: 'PUT',
+				url: `https://platform-api.max.ru/chats/${TEST_CONSTANTS.IDS.VALID_CHAT}/pin`,
+				body: { message_id: 'msg-1', notify: true },
+			});
+		});
+
+		it('передаёт notify=false без изменений', async () => {
+			await pinMessage.call(
+				mockExecuteFunctions as IExecuteFunctions,
+				{} as any,
+				TEST_CONSTANTS.IDS.VALID_CHAT,
+				'msg-2',
+				false,
+			);
+			AssertionHelpers.expectHttpRequest(mockExecuteFunctions.helpers!.httpRequest as jest.Mock, {
+				method: 'PUT',
+				body: { message_id: 'msg-2', notify: false },
+			});
+		});
+
+		it('обрезает пробелы в messageId перед отправкой', async () => {
+			await pinMessage.call(
+				mockExecuteFunctions as IExecuteFunctions,
+				{} as any,
+				TEST_CONSTANTS.IDS.VALID_CHAT,
+				'  msg-3  ',
+			);
+			const call = (mockExecuteFunctions.helpers!.httpRequest as jest.Mock).mock.calls[0]?.[0];
+			expect(call.body.message_id).toBe('msg-3');
+		});
+
+		it('возвращает default success-объект если API ответил null', async () => {
+			const scenario = new MockScenarioBuilder()
+				.withCredentials({ accessToken: 'test-token' })
+				.withHttpResponse(null)
+				.build();
+			const result = await pinMessage.call(
+				scenario.mockExecuteFunctions,
+				{} as any,
+				TEST_CONSTANTS.IDS.VALID_CHAT,
+				'msg-4',
+			);
+			expect(result.success).toBe(true);
+			expect(result.chat_id).toBe(TEST_CONSTANTS.IDS.VALID_CHAT);
+			expect(result.message_id).toBe('msg-4');
+		});
+
+		it('падает на пустой messageId', async () => {
+			await AssertionHelpers.expectAsyncError(
+				() =>
+					pinMessage.call(
+						mockExecuteFunctions as IExecuteFunctions,
+						{} as any,
+						TEST_CONSTANTS.IDS.VALID_CHAT,
+						'   ',
+					),
+				Error,
+				/Message ID is required/,
+			);
+		});
+
+		it('падает на NaN chatId', async () => {
+			await AssertionHelpers.expectAsyncError(
+				() =>
+					pinMessage.call(
+						mockExecuteFunctions as IExecuteFunctions,
+						{} as any,
+						NaN as any,
+						'msg-5',
+					),
+				Error,
+				/Chat ID is required/,
+			);
+		});
+
+		it('оборачивает API-ошибку через handleMaxApiError', async () => {
+			const scenario = new MockScenarioBuilder()
+				.withCredentials({ accessToken: 'test-token' })
+				.withHttpError(new Error('API Error'))
+				.build();
+			await AssertionHelpers.expectAsyncError(
+				() =>
+					pinMessage.call(
+						scenario.mockExecuteFunctions,
+						{} as any,
+						TEST_CONSTANTS.IDS.VALID_CHAT,
+						'msg-6',
+					),
 				NodeApiError,
 				/Request failed/i,
 			);

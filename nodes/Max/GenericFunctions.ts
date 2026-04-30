@@ -1793,6 +1793,58 @@ export async function leaveChat(this: IExecuteFunctions, _bot: Bot, chatId: numb
 }
 
 /**
+ * Закрепить сообщение в чате через Max Bot API.
+ *
+ * Endpoint: `PUT /chats/{chatId}/pin` с body `{message_id, notify}`.
+ * Работает только в групповых чатах (`chat_type: chat`); в личке
+ * MAX вернёт 4xx — оборачиваем в понятную ошибку.
+ *
+ * Требуется permission `pin_message` у бота в чате.
+ *
+ * @param chatId — ID группового чата.
+ * @param messageId — ID сообщения, которое закрепляем.
+ * @param notify — рассылать ли уведомление участникам (default true).
+ */
+export async function pinMessage(
+	this: IExecuteFunctions,
+	_bot: Bot,
+	chatId: number,
+	messageId: string,
+	notify: boolean = true,
+): Promise<any> {
+	if (!chatId || isNaN(chatId)) {
+		throw new Error('Chat ID is required and must be a number');
+	}
+	if (!messageId || messageId.trim() === '') {
+		throw new Error('Message ID is required and cannot be empty');
+	}
+
+	try {
+		const credentials = await this.getCredentials('maxApi');
+		const baseUrl = (credentials['baseUrl'] as string) || DEFAULT_MAX_BASE_URL;
+		const accessToken = credentials['accessToken'] as string;
+
+		const result = await this.helpers.httpRequest({
+			method: 'PUT',
+			url: `${baseUrl}/chats/${chatId}/pin`,
+			headers: {
+				...getAuthHeaders(accessToken),
+				'Content-Type': 'application/json',
+			},
+			body: {
+				message_id: messageId.trim(),
+				notify,
+			},
+			json: true,
+		});
+
+		return result || { success: true, chat_id: chatId, message_id: messageId.trim() };
+	} catch (error) {
+		return await handleMaxApiError.call(this, error, 'pin message');
+	}
+}
+
+/**
  * Validate keyboard layout and enforce Max API limits
  *
  * Validates the overall structure of an inline keyboard including row count,
