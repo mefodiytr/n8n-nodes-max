@@ -1,5 +1,46 @@
 # Журнал изменений
 
+## v0.2.0 - 2026-04-30
+
+### Добавлено
+
+- Операция `Pin Message` (`PUT /chats/{chatId}/pin`): закрепление сообщения в групповом чате с опцией `Notify Members` для рассылки уведомления участникам.
+- Операция `Unpin Message` (`DELETE /chats/{chatId}/pin`): открепление текущего закреплённого сообщения. В API нет параметра `message_id` — открепляется ровно то, что было закреплено.
+- Операция `Forward Message` (`POST /messages?chat_id={target}` с body `{link: {type: forward, message_id}}`): пересылка существующего сообщения в другой чат. Поле `From Chat ID` информационное — API использует только `message_id` и target.
+- Операция `Edit Chat` (`PATCH /chats/{chatId}`): обновление `title` / `description` / `icon.url` группового чата. Иконка задаётся URL'ом — MAX скачивает её сам; upload-from-binary в этой версии не поддерживается. Хотя бы одно поле должно быть задано.
+- Операция `Send Action` (`POST /chats/{chatId}/actions`): индикатор активности бота. Поддерживаемые actions — `typing_on`, `sending_photo`, `sending_video`, `sending_audio`, `sending_file`, `mark_seen`.
+
+### Улучшено
+
+- Дедупликация webhook-событий триггера: повторная доставка одного и того же update'а (ретрай MAX, гонка при апдейте подписки) больше не запускает workflow дважды. В Update-объектах MAX нет `update_id`, поэтому ключ композитный — по `update_type`-специфичной схеме (`message.body.mid`, `callback_id`, `chat_id+user_id+timestamp` и т.д.). TTL: 12 часов для известных типов, 60 секунд для неизвестных (SHA-256 fallback).
+- Логирование в триггере и в подсистеме подписок переведено с `console.log` на `this.logger` n8n-контекста с осмысленными уровнями (`debug` для фильтрации, `info` для lifecycle подписки, `error` для падений).
+
+### Сопровождение
+
+- Опции операций в UI отсортированы по алфавиту (правило `n8n-nodes-base/node-param-options-type-unsorted-items`).
+- Helpers `passesAdditionalFilters` / `passesChatIdFilter` / `passesUserIdFilter` принимают опциональный `Logger`-параметр — фильтрация может писать в n8n-логи без хардкода `console.log`.
+
+### Кому важно
+
+- Тем, кто использует `Max Trigger` через webhook: дедупликация важна для критичных воркфлоу с side-effect'ами (запись в БД, отправка писем, оплаты), которые не должны выполняться дважды.
+- Тем, кто строит сценарии модерации / приветствий в группах — `Pin/Unpin` и `Edit Chat` закрывают типичные нужды.
+- Тем, кто хочет UX «бот печатает...» в долгих LLM-сценариях — `Send Action: typing_on` перед `Send Message`.
+
+### Что проверить после обновления
+
+- В webhook-триггере: при двойной доставке одного события workflow запускается только один раз. В debug-логе появляется `Max Trigger - дубликат update <key>, пропускаю запуск workflow`.
+- `Pin Message` в групповом чате с `notify=true` рассылает уведомление, с `notify=false` — закрепляет молча; в личном чате возвращается понятная ошибка через стандартный `handleMaxApiError`.
+- `Forward Message` корректно пересылает сообщение по `message_id` без необходимости знать `from_chat_id`.
+- `Edit Chat` принимает любое подмножество `title`/`description`/`iconUrl` — пустые поля в запрос не уходят, передавать одно `notify` нельзя.
+- `Send Action: typing_on` возвращает 200 OK; визуальный индикатор может не показаться у получателя — это поведение MAX-клиента, не баг ноды.
+- Ранее работавшие операции (`Send`/`Edit`/`Delete`/`Answer Callback Query`/`Get Chat Info`/`Leave Chat`) не сломались — регресс-тесты в наборе.
+
+### Для разработки
+
+- Регрессионные тесты на каждый из новых helper'ов (`pinMessage`, `unpinMessage`, `forwardMessage`, `editChat`, `sendAction`) и на execute()-ветки в Max-ноде; всего +51 тест (344 → 395).
+- Новый файл `nodes/Max/EventDedupCache.ts` с пер-update_type ключами и TTL; покрытие 100% по statements/branches/functions/lines.
+- Документы `INVESTIGATION.md`, `IMPROVEMENT_PLAN.md`, `API_QUESTIONS.md` (на русском) с картой релизов 0.3.0–1.0.0 и зафиксированным техдолгом (rate limit 429 + Retry-After, webhook retry policy MAX, deprecation `photo` → `image`, и т.д.).
+
 ## v0.1.21 - 2026-04-29
 
 ### Улучшено
