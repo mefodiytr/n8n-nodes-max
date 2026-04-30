@@ -1934,6 +1934,82 @@ export async function forwardMessage(
 }
 
 /**
+ * Опции редактирования чата (все опциональные).
+ *
+ * Если все три поля (`title`, `description`, `iconUrl`) пустые —
+ * helper кинет валидационную ошибку, чтобы не делать пустой запрос.
+ */
+export interface EditChatFields {
+	title?: string | undefined;
+	description?: string | undefined;
+	iconUrl?: string | undefined;
+	notify?: boolean | undefined;
+}
+
+/**
+ * Обновить параметры группового чата через `PATCH /chats/{chatId}`.
+ *
+ * Тело запроса собирается только из заданных полей:
+ * `{title?, description?, icon?: {url}, notify?}`. В личных чатах MAX
+ * вернёт 4xx — оборачиваем в обычный handleMaxApiError. Permission
+ * `change_chat_info`.
+ *
+ * @param chatId — ID группового чата.
+ * @param fields — поля для обновления; пустые игнорируются.
+ */
+export async function editChat(
+	this: IExecuteFunctions,
+	_bot: Bot,
+	chatId: number,
+	fields: EditChatFields,
+): Promise<any> {
+	if (!chatId || isNaN(chatId)) {
+		throw new Error('Chat ID is required and must be a number');
+	}
+
+	const body: IDataObject = {};
+	if (fields.title && fields.title.trim().length > 0) {
+		body['title'] = fields.title.trim();
+	}
+	if (fields.description && fields.description.trim().length > 0) {
+		body['description'] = fields.description.trim();
+	}
+	if (fields.iconUrl && fields.iconUrl.trim().length > 0) {
+		body['icon'] = { url: fields.iconUrl.trim() };
+	}
+	if (fields.notify !== undefined) {
+		body['notify'] = fields.notify;
+	}
+
+	if (Object.keys(body).filter((k) => k !== 'notify').length === 0) {
+		throw new Error(
+			'At least one of title, description or iconUrl must be provided to edit a chat',
+		);
+	}
+
+	try {
+		const credentials = await this.getCredentials('maxApi');
+		const baseUrl = (credentials['baseUrl'] as string) || DEFAULT_MAX_BASE_URL;
+		const accessToken = credentials['accessToken'] as string;
+
+		const result = await this.helpers.httpRequest({
+			method: 'PATCH',
+			url: `${baseUrl}/chats/${chatId}`,
+			headers: {
+				...getAuthHeaders(accessToken),
+				'Content-Type': 'application/json',
+			},
+			body,
+			json: true,
+		});
+
+		return result || { success: true, chat_id: chatId };
+	} catch (error) {
+		return await handleMaxApiError.call(this, error, 'edit chat');
+	}
+}
+
+/**
  * Validate keyboard layout and enforce Max API limits
  *
  * Validates the overall structure of an inline keyboard including row count,

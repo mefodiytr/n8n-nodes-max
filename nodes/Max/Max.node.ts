@@ -18,6 +18,7 @@ import {
 	pinMessage,
 	unpinMessage,
 	forwardMessage,
+	editChat,
 	validateAndFormatText,
 	addAdditionalFields,
 	handleAttachments,
@@ -974,6 +975,12 @@ export class Max implements INodeType {
 				},
 				options: [
 					{
+						name: 'Edit Chat',
+						value: 'editChat',
+						description: 'Update chat title, description or icon (group chats only)',
+						action: 'Edit a chat',
+					},
+					{
 						name: 'Get Chat Info',
 						value: 'getChatInfo',
 						action: 'Get chat information',
@@ -995,10 +1002,67 @@ export class Max implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['chat'],
-						operation: ['getChatInfo', 'leaveChat'],
+						operation: ['getChatInfo', 'leaveChat', 'editChat'],
 					},
 				},
 				default: '',
+			},
+			// Edit Chat Operation
+			{
+				displayName: 'Title',
+				name: 'editChatTitle',
+				type: 'string',
+				displayOptions: {
+					show: {
+						resource: ['chat'],
+						operation: ['editChat'],
+					},
+				},
+				default: '',
+				description: 'New chat title. Leave empty to keep current.',
+			},
+			{
+				displayName: 'Description',
+				name: 'editChatDescription',
+				type: 'string',
+				typeOptions: {
+					rows: 3,
+				},
+				displayOptions: {
+					show: {
+						resource: ['chat'],
+						operation: ['editChat'],
+					},
+				},
+				default: '',
+				description: 'New chat description. Leave empty to keep current.',
+			},
+			{
+				displayName: 'Icon URL',
+				name: 'editChatIconUrl',
+				type: 'string',
+				displayOptions: {
+					show: {
+						resource: ['chat'],
+						operation: ['editChat'],
+					},
+				},
+				default: '',
+				description:
+					'Public URL of the new chat icon. MAX downloads it. Upload-from-binary is not supported in 0.2.0.',
+			},
+			{
+				displayName: 'Notify Members',
+				name: 'editChatNotify',
+				type: 'boolean',
+				displayOptions: {
+					show: {
+						resource: ['chat'],
+						operation: ['editChat'],
+					},
+				},
+				default: true,
+				description: 'Whether to notify chat members about the change',
 			},
 		],
 	};
@@ -1473,6 +1537,54 @@ export class Max implements INodeType {
 
 						// Leave chat using Max Bot API
 						const responseData = await leaveChat.call(this, bot, chatIdNumber);
+
+						returnData.push({
+							json: responseData,
+							pairedItem: {
+								item: i,
+							},
+						});
+					} else if (operation === 'editChat') {
+						const chatId = this.getNodeParameter('chatId', i) as string;
+						const title = this.getNodeParameter('editChatTitle', i, '') as string;
+						const description = this.getNodeParameter('editChatDescription', i, '') as string;
+						const iconUrl = this.getNodeParameter('editChatIconUrl', i, '') as string;
+						const notify = this.getNodeParameter('editChatNotify', i, true) as boolean;
+
+						if (!chatId || chatId.trim() === '') {
+							throw new NodeOperationError(
+								this.getNode(),
+								'Chat ID is required and cannot be empty',
+								{ itemIndex: i },
+							);
+						}
+						const chatIdNumber = parseInt(chatId.trim(), 10);
+						if (isNaN(chatIdNumber)) {
+							throw new NodeOperationError(
+								this.getNode(),
+								`Invalid Chat ID: "${chatId}". Must be a number.`,
+								{ itemIndex: i },
+							);
+						}
+
+						const hasTitle = title.trim().length > 0;
+						const hasDescription = description.trim().length > 0;
+						const hasIcon = iconUrl.trim().length > 0;
+						if (!hasTitle && !hasDescription && !hasIcon) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'At least one of Title, Description or Icon URL must be set',
+								{ itemIndex: i },
+							);
+						}
+
+						const bot = await createMaxBotInstance.call(this);
+						const responseData = await editChat.call(this, bot, chatIdNumber, {
+							title: hasTitle ? title : undefined,
+							description: hasDescription ? description : undefined,
+							iconUrl: hasIcon ? iconUrl : undefined,
+							notify,
+						});
 
 						returnData.push({
 							json: responseData,

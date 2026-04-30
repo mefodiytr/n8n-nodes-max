@@ -13,6 +13,7 @@ jest.mock('../GenericFunctions', () => ({
 	pinMessage: jest.fn().mockResolvedValue({ success: true }),
 	unpinMessage: jest.fn().mockResolvedValue({ success: true }),
 	forwardMessage: jest.fn().mockResolvedValue({ message_id: 'fwd-1' }),
+	editChat: jest.fn().mockResolvedValue({ chat_id: 1, title: 'New' }),
 	validateAndFormatText: jest.fn((text, _format) => text),
 	addAdditionalFields: jest.fn((params, fields) => ({ ...params, ...fields.additionalFields })),
 	handleAttachments: jest.fn().mockResolvedValue([]),
@@ -31,6 +32,7 @@ import {
 	pinMessage,
 	unpinMessage,
 	forwardMessage,
+	editChat,
 	handleAttachments,
 } from '../GenericFunctions';
 
@@ -82,7 +84,7 @@ describe('Max Node', () => {
 			const chatOps = description.properties.find(
 				(p) => p.name === 'operation' && p.displayOptions?.show?.['resource']?.includes('chat'),
 			);
-			expect(chatOps?.options).toHaveLength(2);
+			expect(chatOps?.options).toHaveLength(3);
 		});
 
 		it('should expose token-based attachment input in the UI schema', () => {
@@ -572,6 +574,53 @@ describe('Max Node', () => {
 				await expect(maxNode.execute.call(executeFunctions)).rejects.toThrow(
 					'Invalid Chat ID: "invalid-id". Must be a number.',
 				);
+			});
+
+			it('should call editChat with provided fields', async () => {
+				const params = {
+					resource: 'chat',
+					operation: 'editChat',
+					chatId: '42',
+					editChatTitle: 'Updated',
+					editChatDescription: '',
+					editChatIconUrl: 'https://cdn.example/icon.png',
+					editChatNotify: false,
+				};
+				const executeFunctions = getExecuteFunctionsMock(params);
+				await maxNode.execute.call(executeFunctions);
+				expect(editChat).toHaveBeenCalledWith(expect.anything(), 42, {
+					title: 'Updated',
+					description: undefined,
+					iconUrl: 'https://cdn.example/icon.png',
+					notify: false,
+				});
+			});
+
+			it('should throw when no editable field provided to editChat', async () => {
+				const params = {
+					resource: 'chat',
+					operation: 'editChat',
+					chatId: '42',
+					editChatTitle: '',
+					editChatDescription: '   ',
+					editChatIconUrl: '',
+					editChatNotify: true,
+				};
+				const executeFunctions = getExecuteFunctionsMock(params);
+				await expect(maxNode.execute.call(executeFunctions)).rejects.toThrow(
+					'At least one of Title, Description or Icon URL must be set',
+				);
+			});
+
+			it('should throw on empty chat ID for editChat', async () => {
+				const params = {
+					resource: 'chat',
+					operation: 'editChat',
+					chatId: '',
+					editChatTitle: 'X',
+				};
+				const executeFunctions = getExecuteFunctionsMock(params);
+				await expect(maxNode.execute.call(executeFunctions)).rejects.toThrow('Chat ID is required');
 			});
 		});
 

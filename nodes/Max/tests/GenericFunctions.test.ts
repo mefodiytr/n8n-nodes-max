@@ -25,6 +25,7 @@ import {
 	pinMessage,
 	unpinMessage,
 	forwardMessage,
+	editChat,
 	validateKeyboardLayout,
 	formatInlineKeyboard,
 	createInlineKeyboardAttachment,
@@ -2797,6 +2798,115 @@ describe('GenericFunctions - Comprehensive Test Suite', () => {
 						TEST_CONSTANTS.IDS.VALID_CHAT,
 						'src-5',
 					),
+				NodeApiError,
+				/Request failed/i,
+			);
+		});
+	});
+
+	describe('editChat', () => {
+		let mockExecuteFunctions: Partial<IExecuteFunctions>;
+
+		beforeEach(() => {
+			const scenario = new MockScenarioBuilder()
+				.withCredentials({ accessToken: 'test-token' })
+				.withHttpResponse({ chat_id: TEST_CONSTANTS.IDS.VALID_CHAT, title: 'New' })
+				.build();
+			mockExecuteFunctions = scenario.mockExecuteFunctions;
+		});
+
+		it('PATCH /chats/{chatId} с title + iconUrl + notify', async () => {
+			await editChat.call(
+				mockExecuteFunctions as IExecuteFunctions,
+				{} as any,
+				TEST_CONSTANTS.IDS.VALID_CHAT,
+				{ title: 'New', iconUrl: 'https://cdn/icon.png', notify: false },
+			);
+			AssertionHelpers.expectHttpRequest(mockExecuteFunctions.helpers!.httpRequest as jest.Mock, {
+				method: 'PATCH',
+				url: `https://platform-api.max.ru/chats/${TEST_CONSTANTS.IDS.VALID_CHAT}`,
+				body: {
+					title: 'New',
+					icon: { url: 'https://cdn/icon.png' },
+					notify: false,
+				},
+			});
+		});
+
+		it('включает description если задан, не включает пустые поля', async () => {
+			await editChat.call(
+				mockExecuteFunctions as IExecuteFunctions,
+				{} as any,
+				TEST_CONSTANTS.IDS.VALID_CHAT,
+				{ description: 'about chat' },
+			);
+			const call = (mockExecuteFunctions.helpers!.httpRequest as jest.Mock).mock.calls[0]?.[0];
+			expect(call.body).toEqual({ description: 'about chat' });
+		});
+
+		it('обрезает пробелы в title/description/iconUrl', async () => {
+			await editChat.call(
+				mockExecuteFunctions as IExecuteFunctions,
+				{} as any,
+				TEST_CONSTANTS.IDS.VALID_CHAT,
+				{ title: '  spaced  ', description: '\nnl\n', iconUrl: '  http://x  ' },
+			);
+			const call = (mockExecuteFunctions.helpers!.httpRequest as jest.Mock).mock.calls[0]?.[0];
+			expect(call.body.title).toBe('spaced');
+			expect(call.body.description).toBe('nl');
+			expect(call.body.icon.url).toBe('http://x');
+		});
+
+		it('падает когда нет ни одного редактируемого поля', async () => {
+			await AssertionHelpers.expectAsyncError(
+				() =>
+					editChat.call(
+						mockExecuteFunctions as IExecuteFunctions,
+						{} as any,
+						TEST_CONSTANTS.IDS.VALID_CHAT,
+						{ notify: true },
+					),
+				Error,
+				/At least one of title/,
+			);
+		});
+
+		it('падает на NaN chatId', async () => {
+			await AssertionHelpers.expectAsyncError(
+				() =>
+					editChat.call(mockExecuteFunctions as IExecuteFunctions, {} as any, NaN as any, {
+						title: 'X',
+					}),
+				Error,
+				/Chat ID is required/,
+			);
+		});
+
+		it('возвращает default success-объект если API ответил null', async () => {
+			const scenario = new MockScenarioBuilder()
+				.withCredentials({ accessToken: 'test-token' })
+				.withHttpResponse(null)
+				.build();
+			const result = await editChat.call(
+				scenario.mockExecuteFunctions,
+				{} as any,
+				TEST_CONSTANTS.IDS.VALID_CHAT,
+				{ title: 'X' },
+			);
+			expect(result.success).toBe(true);
+			expect(result.chat_id).toBe(TEST_CONSTANTS.IDS.VALID_CHAT);
+		});
+
+		it('оборачивает API-ошибку через handleMaxApiError', async () => {
+			const scenario = new MockScenarioBuilder()
+				.withCredentials({ accessToken: 'test-token' })
+				.withHttpError(new Error('API Error'))
+				.build();
+			await AssertionHelpers.expectAsyncError(
+				() =>
+					editChat.call(scenario.mockExecuteFunctions, {} as any, TEST_CONSTANTS.IDS.VALID_CHAT, {
+						title: 'X',
+					}),
 				NodeApiError,
 				/Request failed/i,
 			);
