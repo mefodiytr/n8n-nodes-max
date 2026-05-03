@@ -1,5 +1,5 @@
 {
-	"name": "@bccontrol/n8n-nodes-max",
+	"name": "@mefodiytr/n8n-nodes-max",
 	"version": "0.2.0",
 	"description": "n8n community node for Max messenger integration. Fork of pfrankov/n8n-nodes-max with additional message and chat operations (pin/unpin/forward/edit_chat/send_action) and webhook deduplication.",
 	"keywords": [
@@ -11,7 +11,8 @@
 		"access": "public"
 	},
 	"author": {
-		"name": "BCcontrol",
+		"name": "Mikhail",
+		"email": "mefodiytr@users.noreply.github.com",
 		"url": "https://github.com/mefodiytr"
 	},
 	"contributors": [
@@ -22,7 +23,7 @@
 	],
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/mefodiytr/n8n-nodes-max.git"
+		"url": "git+https://github.com/mefodiytr/n8n-nodes-max.git"
 	},
 	"engines": {
 		"node": ">=20.15"

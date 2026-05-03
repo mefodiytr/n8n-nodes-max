@@ -1,10 +1,25 @@
-# @bccontrol/n8n-nodes-max
+# @mefodiytr/n8n-nodes-max
 
-[![npm version](https://img.shields.io/npm/v/@bccontrol/n8n-nodes-max?logo=npm)](https://www.npmjs.com/package/@bccontrol/n8n-nodes-max)
+[![npm version](https://img.shields.io/npm/v/@mefodiytr/n8n-nodes-max?logo=npm)](https://www.npmjs.com/package/@mefodiytr/n8n-nodes-max)
+
+## Это форк
+
+Это расширенная версия [n8n-nodes-max](https://github.com/pfrankov/n8n-nodes-max) от Павла Франкова. Спасибо ему за отличную базу.
+
+Что добавлено в 0.2.0:
+
+- Дедупликация webhook-событий (защита от двойной доставки)
+- Перевод логирования с `console.log` на n8n logger
+- Pin / Unpin сообщений
+- Forward сообщений между чатами
+- Edit chat (название, иконка, описание)
+- Send action (`typing_on` и др. индикаторы)
+
+Что планируется в 0.3.0+: long-polling trigger, members management, subscriptions / bot info ops.
+
+---
 
 Нода для интеграции мессенджера Max с платформой автоматизации n8n.
-
-> Это форк [pfrankov/n8n-nodes-max](https://github.com/pfrankov/n8n-nodes-max) с расширенным набором операций (`Pin/Unpin/Forward Message`, `Edit Chat`, `Send Action`) и дедупликацией webhook-событий. См. `CHANGELOG.md` для подробностей.
 
 <img width="518" height="429" alt="image" src="https://github.com/user-attachments/assets/577165bb-510f-4523-b898-76ea94dc0f2b" />
 
@@ -15,7 +30,7 @@
 1. Установите пакет через npm в директории n8n:
 
 ```bash
-npm install @bccontrol/n8n-nodes-max
+npm install @mefodiytr/n8n-nodes-max
 ```
 
 2. Перезапустите n8n для загрузки новой ноды
@@ -25,14 +40,14 @@ npm install @bccontrol/n8n-nodes-max
 1. Откройте настройки вашего workspace
 2. Перейдите в раздел "Community nodes"
 3. Нажмите "Install a community node"
-4. Введите `@bccontrol/n8n-nodes-max` и нажмите "Install"
+4. Введите `@mefodiytr/n8n-nodes-max` и нажмите "Install"
 
 ### Альтернативный способ (переменная окружения)
 
 Добавьте пакет в переменную окружения:
 
 ```bash
-export N8N_CUSTOM_EXTENSIONS=@bccontrol/n8n-nodes-max
+export N8N_CUSTOM_EXTENSIONS=@mefodiytr/n8n-nodes-max
 ```
 
 **Полезные ссылки:**
