@@ -6,7 +6,7 @@
 		"n8n-community-node-package"
 	],
 	"license": "MIT",
-	"homepage": "",
+	"homepage": "https://github.com/mefodiytr/n8n-nodes-max",
 	"publishConfig": {
 		"access": "public"
 	},
@@ -22,7 +22,7 @@
 	],
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/pfrankov/n8n-nodes-max.git"
+		"url": "https://github.com/mefodiytr/n8n-nodes-max.git"
 	},
 	"engines": {
 		"node": ">=20.15"
