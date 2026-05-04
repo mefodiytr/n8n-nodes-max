@@ -14,7 +14,7 @@ describe('MaxTrigger Node', () => {
 		triggerInstance = new MaxTrigger();
 		// Clear all mock instances and calls before each test
 		(MaxWebhookManager as jest.Mock).mockClear();
-		(MaxEventProcessor as jest.Mock).mockClear();
+		(MaxEventProcessor as unknown as jest.Mock).mockClear();
 	});
 
 	describe('Node Description', () => {
@@ -83,7 +83,7 @@ describe('MaxTrigger Node', () => {
 		it('webhook should instantiate MaxEventProcessor and call processWebhookEvent', async () => {
 			await triggerInstance.webhook.call(mockWebhookFunctions);
 			expect(MaxEventProcessor).toHaveBeenCalledTimes(1);
-			const mockProcessorInstance = (MaxEventProcessor as jest.Mock).mock.instances[0];
+			const mockProcessorInstance = (MaxEventProcessor as unknown as jest.Mock).mock.instances[0];
 			expect(mockProcessorInstance.processWebhookEvent).toHaveBeenCalledTimes(1);
 		});
 	});
