@@ -1,5 +1,39 @@
 # Журнал изменений
 
+## v0.3.0 - 2026-05-04
+
+### Кому важно
+
+- Тем, у кого нет публичного HTTPS endpoint для webhook'а (closed-network n8n, локальный n8n без проброса наружу, разработка без `ngrok`).
+- Тем, кто строит сценарии в средах за NAT / VPN, где Max API не может достучаться до webhook URL.
+- Тем, кому удобнее держать всю исходящую коммуникацию через ОДИН-исходящий-канал (polling делает только outbound запросы).
+
+### Добавлено
+
+- Новая нода `Max Polling Trigger` (`GET /updates?marker=&timeout=&limit=`) — long-polling-альтернатива webhook-триггеру. Соединение держится до 90 секунд, новые события приходят как только появляются. Marker (курсор) хранится в `getWorkflowStaticData('global')['maxPollingMarker']` и переживает рестарт workflow.
+- В UI новой ноды: `Events` (multi-select из 11 update_type), `Polling Timeout` (15-90 сек, default 30), `Batch Limit` (10-1000, default 100), `Force Unsubscribe Webhooks on Activate` (boolean), `Additional Fields → Restrict to Chat IDs / User IDs` для фильтрации.
+
+### Улучшено
+
+- Дедупликация (`MaxEventProcessor.checkDuplicate`) теперь публичный статический примитив — переиспользуется и webhook-триггером (как раньше), и polling-триггером без дублирования логики.
+
+### Сопровождение
+
+- Webhook и polling **взаимоисключающие** на стороне MAX API: при активной webhook-подписке long polling не работает. Polling-нода при активации проверяет `GET /subscriptions` — либо падает с понятной ошибкой и инструкцией, либо (при включённом `Force Unsubscribe Webhooks on Activate`) удаляет все подписки. Это ограничение API, не ноды.
+
+### Что проверить после обновления
+
+- В свежем workflow с `Max Polling Trigger` (одна нода) — отправить тестовое сообщение боту в личку, событие приходит в течение `Polling Timeout` секунд.
+- Деактивация workflow прерывает текущий long-polling-запрос немедленно (через `AbortController`), а не висит до конца timeout'а.
+- Marker сохраняется между рестартами workflow: после `deactivate → activate` нода стартует с того же `marker`, не получает старые события повторно.
+- Если на том же бот-токене активен `Max Trigger` (webhook) — `Max Polling Trigger` падает с ошибкой `«Long polling несовместим с активной webhook-подпиской»`. Включение `Force Unsubscribe Webhooks on Activate` удаляет webhook и стартует polling.
+- Существующие webhook-workflows на `Max Trigger` не сломались (регресс-тесты в `MaxEventProcessor.test.ts` — 65/65 проходят, общее число тестов 395 → 410).
+
+### Для разработки
+
+- Новый файл `nodes/Max/MaxPollingTrigger.node.ts` с trigger-функцией, фоновым polling-циклом, backoff-таблицей `[1, 2, 4, 8, 16, 30]` сек, `AbortController` для немедленного выхода из sleep при deactivate.
+- Регрессионные тесты в `nodes/Max/tests/MaxPollingTrigger.node.test.ts` (15 тестов): description, handleWebhookConflict (4 ветки), polling cycle (5 сценариев — marker, фильтры, дедуп), error handling (401, backoff), closeFunction.
+
 ## v0.2.0 - 2026-04-30
 
 ### Кому важно

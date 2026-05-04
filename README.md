@@ -15,7 +15,11 @@
 - Edit chat (название, иконка, описание)
 - Send action (`typing_on` и др. индикаторы)
 
-Что планируется в 0.3.0+: long-polling trigger, members management, subscriptions / bot info ops.
+Что добавлено в 0.3.0:
+
+- Новая нода `Max Polling Trigger` — long-polling-альтернатива webhook'у для сред без публичного HTTPS endpoint
+
+Что планируется в 0.4.0+: members management, rate limit handling (429 + Retry-After), subscriptions / bot info ops.
 
 ---
 
@@ -97,7 +101,11 @@ export N8N_CUSTOM_EXTENSIONS=@mefodiytr/n8n-nodes-max
 - **Edit Chat** — обновление title / description / icon (только для групповых чатов; иконка задаётся URL'ом, MAX скачивает её сам)
 - **Send Action** — отправка индикаторов активности бота (`typing_on`, `sending_photo/video/audio/file`, `mark_seen`); парного `typing_off` в API нет — клиент сам гасит индикатор по таймауту, и иногда `typing_on` возвращает 200 OK без визуального индикатора (поведение клиента, не баг)
 
-### Триггер
+### Триггеры
+
+В пакете две ноды-триггера. Выбор зависит от того, есть ли у n8n публичный HTTPS endpoint.
+
+#### `Max Trigger` (webhook)
 
 - Получение событий в реальном времени:
   - Новые сообщения в личных диалогах (`message_created`) и чатах (`message_chat_created`)
@@ -106,6 +114,29 @@ export N8N_CUSTOM_EXTENSIONS=@mefodiytr/n8n-nodes-max
 - Поддержка webhook URL с интернационализированными доменами (IDN/Punycode) для корректной TLS-валидации
 - **Дедупликация webhook'ов**: при ретрае MAX или гонке при апдейте подписки workflow запускается ровно один раз. Ключ строится по `update_type` (см. ниже), состояние хранится в `getWorkflowStaticData('node')`, TTL 12 часов для известных типов и 60 секунд для неизвестных
 - **Логирование**: события триггера и lifecycle подписки идут через `this.logger` (`debug`/`info`/`error`), а не `console.log` — удобно фильтровать через стандартные средства n8n
+
+#### `Max Polling Trigger` (long-polling)
+
+Альтернатива webhook'у для сред без публичного HTTPS endpoint (закрытые сети, локальный n8n без проброса наружу).
+
+- Использует `GET /updates?marker=&timeout=&limit=` — соединение держится до 90 секунд, новые события приходят как только появляются
+- Marker (курсор) хранится в `getWorkflowStaticData('global')['maxPollingMarker']` и переживает рестарт workflow
+- Backoff на временных ошибках: `1 → 2 → 4 → 8 → 16 → 30` секунд, сбрасывается на первом успешном запросе
+- На `401 Unauthorized` — останавливает polling и пишет error в лог (auto-restart бесполезен без новых credentials)
+- Дедупликация по composite key (та же логика, что в webhook-триггере) — secondary safety net на случай потери marker'а при рестарте
+- **Webhook и polling взаимоисключающие** (ограничение MAX API): при активной webhook-подписке polling вернёт 0 update'ов. Параметр `Force Unsubscribe Webhooks on Activate` управляет поведением при активации:
+  - `false` (по умолчанию) — если подписки есть, нода падает с понятной ошибкой и инструкцией
+  - `true` — нода удаляет все активные подписки перед стартом polling
+
+##### Когда использовать polling vs webhook
+
+| Условие                                               | Выбор                              |
+| ----------------------------------------------------- | ---------------------------------- |
+| n8n доступен по публичному HTTPS                      | Webhook (быстрее, меньше нагрузки) |
+| n8n за NAT / в VPN / без публичного DNS               | **Polling**                        |
+| Нужна работа в разработке без `ngrok` / туннелей      | **Polling**                        |
+| Один воркспейс — несколько workflow на ту же подписку | Webhook                            |
+| Latency критична (ms-уровень)                         | Webhook                            |
 
 ## Настройка
 
@@ -130,11 +161,17 @@ export N8N_CUSTOM_EXTENSIONS=@mefodiytr/n8n-nodes-max
 2. Укажите `Message ID` и новый текст
 3. Включите `Clear Attachments`, чтобы Max API получил `attachments: []` и удалил текущую inline-клавиатуру
 
-### Получение сообщений
+### Получение сообщений (webhook)
 
 1. Добавьте ноду Max Trigger
 2. Настройте webhook
 3. Выберите типы событий для отслеживания
+
+### Получение сообщений (long-polling)
+
+1. Добавьте ноду `Max Polling Trigger`
+2. Выберите типы событий
+3. При первой активации — если есть активные webhook-подписки, либо деактивируйте все `Max Trigger` workflows, либо включите `Force Unsubscribe Webhooks on Activate`
 
 ## Ресурсы
 
