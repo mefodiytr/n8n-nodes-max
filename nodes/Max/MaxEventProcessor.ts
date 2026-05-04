@@ -147,22 +147,43 @@ export class MaxEventProcessor {
 	 * @returns `true` если событие уже видели → workflow запускать не надо.
 	 */
 	public isDuplicateDelivery(this: IWebhookFunctions, bodyData: MaxWebhookEvent): boolean {
+		const staticData = this.getWorkflowStaticData('node') as Record<string, unknown>;
+		return MaxEventProcessor.checkDuplicate(bodyData, staticData, this.logger);
+	}
+
+	/**
+	 * Дедупликационный примитив без привязки к webhook-контексту.
+	 *
+	 * Принимает уже извлечённый `staticData` и опциональный logger —
+	 * подходит как для webhook-триггера ({@link isDuplicateDelivery}),
+	 * так и для polling-триггера, где `this` имеет тип `ITriggerFunctions`.
+	 *
+	 * Семантика идентична `isDuplicateDelivery`: если ключ построить не
+	 * удалось — пропускаем дедуп с предупреждением; известные ключи
+	 * хранятся 12ч, неизвестные — 60с (см. {@link buildDedupKey}).
+	 *
+	 * @returns `true` если событие уже видели → запускать workflow не надо.
+	 */
+	public static checkDuplicate(
+		bodyData: MaxWebhookEvent,
+		staticData: Record<string, unknown>,
+		logger?: Logger,
+	): boolean {
 		const built = buildDedupKey(bodyData);
 		if (built === null) {
-			this.logger.warn(
+			logger?.warn(
 				'Max Trigger - не удалось построить дедуп-ключ (нет update_type), пропускаю дедуп',
 			);
 			return false;
 		}
 
 		const { key, ttlMs } = built;
-		const staticData = this.getWorkflowStaticData('node') as Record<string, unknown>;
 		const state = readState(staticData);
 		const now = Date.now();
 		pruneExpired(state, now);
 
 		if (isDuplicate(state, key)) {
-			this.logger.debug(`Max Trigger - дубликат update ${key}, пропускаю запуск workflow`);
+			logger?.debug(`Max Trigger - дубликат update ${key}, пропускаю запуск workflow`);
 			writeState(staticData, state);
 			return true;
 		}
