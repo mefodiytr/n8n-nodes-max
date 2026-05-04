@@ -56,7 +56,8 @@
 		],
 		"nodes": [
 			"dist/nodes/Max/Max.node.js",
-			"dist/nodes/Max/MaxTrigger.node.js"
+			"dist/nodes/Max/MaxTrigger.node.js",
+			"dist/nodes/Max/MaxPollingTrigger.node.js"
 		]
 	},
 	"devDependencies": {
